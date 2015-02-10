@@ -322,7 +322,7 @@ void static  half_cycle()
       current_address = address();
       microprocessor_is = data_direction() == HIGH ? READING : WRITING;
       this_device_is_addressed = true;  // FIXME: Change this when there are external peripherals too
-      addressed_device = &RAM;
+      addressed_device = 0xe000 == (current_address & 0xfffe) ? &serial_port : &RAM;
     }
     else {
       latched_data = data();
@@ -358,7 +358,6 @@ void static  half_cycle()
     else { // FALLEN
       if ( this_device_is_addressed  &&  microprocessor_is == WRITING )
       {
-        printf("WARNING! The microprocessor is driving the data bus\n");
         addressed_device->write( current_address, latched_data );
       }
     }

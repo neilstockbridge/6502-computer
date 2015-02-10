@@ -1,6 +1,11 @@
 
+SERIAL_PORT = $e000
+
+
 reset_handler:
 main:
+  lda #$2e    ; ASCII '.'
+: sta SERIAL_PORT
   jmp main
 
 

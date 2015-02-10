@@ -70,7 +70,7 @@ void  write_to_serial_port( uint16_t address, uint8_t data )
 }
 
 
-void init_serial_port( Device *device )
+void  init_serial_port( Device *device )
 {
   struct termios  newtio;
 
@@ -93,10 +93,13 @@ void init_serial_port( Device *device )
 
   tcflush( port, TCIFLUSH );
   tcsetattr( port, TCSANOW, &newtio );
+
+  device->read = read_from_serial_port;
+  device->write = write_to_serial_port;
 }
 
 
-void poll_serial_port()
+void  poll_serial_port()
 {
   fd_set          rfds;
   struct timeval  timeout = { tv_sec:0, tv_usec:0 };
