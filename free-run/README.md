@@ -24,5 +24,5 @@ On a breadboard:
 
 The program on the SoC that drives the controls lines:
 
-<video src="first-free-run.mp4" controls></video>
+Video, 15 MB: [First free run](first-free-run.mp4)
 
