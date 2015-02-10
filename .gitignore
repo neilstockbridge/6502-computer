@@ -1,3 +1,7 @@
+
+free-run/simulator/simulator
+simulator/simulator
+
 # Object files
 *.o
 *.ko
