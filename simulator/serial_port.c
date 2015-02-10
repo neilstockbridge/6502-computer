@@ -27,7 +27,7 @@ uint8_t  to_send[16];
 int      tx_cursor = 0;
 
 
-void  tidy_up()
+void static  tidy_up()
 {
   // Restore the configuration of the serial port:
   tcsetattr( port, TCSANOW, &oldtio );

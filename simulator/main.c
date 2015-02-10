@@ -8,10 +8,12 @@
 */
 
 
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h> // for exit()
 #include <stdarg.h> // for va_list
+#include <time.h>
 #define __USE_BSD
 #include <unistd.h> // for usleep()
 
@@ -224,7 +226,7 @@ uint8_t static  reset()
 }
 
 
-uint8_t static  clock()
+uint8_t static  clock_line()
 {
   return level_at_pin( CLK);
 }
@@ -271,6 +273,13 @@ enum
 }
 microprocessor_is = READING;
 
+enum
+{
+  SLOW,
+  FAST,
+}
+speed;
+
 FILE *log_file = NULL;
 
 
@@ -295,13 +304,14 @@ void  print_status()
   printfat( 6, 2, "DATA    $%02x ", data() );
   printsig( 7, 2, "/IRQ",  irq(), "interrupted", "not interrupting");
   printfat( 8, 2, "creset  %i ", currently_resetting );
-  printfat( 3, 2, "CLK     %s ", clock() ? "HIGH" : "LOW" );
+  printfat( 3, 2, "CLK     %s ", clock_line() ? "HIGH" : "LOW" );
 }
 
 
 void static  half_cycle()
 {
-  usleep( HALF_CYCLE_TIME );
+  if ( speed == SLOW )
+    usleep( HALF_CYCLE_TIME );
   // If the clock is about to RISE..
   //  - The microprocessor may be about to drive the data bus lines so the
   //    simulator should set its data bus pin to High-Z ( INPUT)
@@ -360,9 +370,15 @@ void static  half_cycle()
     }
   }
 
-  fprintf( log_file, "%04i reset:%i clk:%i addr:%04x ddr:%i, data:%02x, da:%i, mi:%i, ca:%04x\n", half_cycles, reset(), clock(), address(), data_direction(), data(), this_device_is_addressed, microprocessor_is == READING, current_address );
-  fflush( log_file );
-  print_status();
+  if ( speed == SLOW )
+  {
+    fprintf( log_file,
+      "%04i reset:%i clk:%i addr:%04x ddr:%i, data:%02x, da:%i, mi:%i, ca:%04x\n",
+      half_cycles, reset(), clock_line(), address(), data_direction(), data(),
+      this_device_is_addressed, microprocessor_is == READING, current_address );
+    fflush( log_file );
+    print_status();
+  }
 
   half_cycles += 1;
 }
@@ -394,8 +410,25 @@ void static  perform_reset()
 }
 
 
+void  int_handler( int signal )
+{
+  // By exiting "normally", atexit handlers will be invoked
+  exit( 0 );
+}
+
+
+void static  tidy_up()
+{
+  fclose( log_file );
+}
+
+
 void init()
 {
+  // Install a handler for SIGINT ( Ctrl-C)
+  signal( SIGINT, int_handler );
+  atexit( tidy_up );
+
   init_serial_port( &serial_port );
 
   pinctrl_block = peripheral_block( PINCTRL_BASE, PINCTRL_SIZE );
@@ -405,7 +438,8 @@ void init()
     exit(1);
   }
 
-  clear_screen();
+  if ( speed == SLOW )
+    clear_screen();
 
   // Configure the GPIO pins
   for ( int  c = 1;  c <= 2;  c += 1 )
@@ -445,6 +479,8 @@ void init()
   drive_pin( CLK, 0 );
   drive_pin( IRQB, 1 );
 
+  printf("Performing reset..\n");
+
   perform_reset();
 }
 
@@ -470,14 +506,30 @@ void loop()
   //    drivers.  There could even be a delay, although this may not stricyly
   //    be necessary since this is software and therefore slow
   poll_serial_port();
-  int  reloaded = update_RAM();
-  if ( reloaded )
-    perform_reset();
+
+  // To speed things up ( even though it will result in an irregular clock),
+  // only check to updates to the ROM periodically, not even half cycle
+  time_t static  when_last_updated = 0;
+  time_t  now = time( NULL );
+  uint32_t static  previous_half_cycle_count = 0;
+  if ( when_last_updated < now )
+  {
+    int  reloaded = update_RAM();
+    if ( reloaded ) {
+      perform_reset();
+    }
+    fprintf( log_file, "%u Hz\n", (half_cycles - previous_half_cycle_count) >> 1 );
+    fflush( log_file );
+    previous_half_cycle_count = half_cycles;
+    when_last_updated = now;
+  }
 }
 
 
 int main( int argc, char *argv[])
 {
+  speed = 1 == argc ? SLOW : FAST;
+
   init();
 
   while( true )
