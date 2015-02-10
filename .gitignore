@@ -1,6 +1,7 @@
 
 free-run/simulator/simulator
 simulator/simulator
+**/*.swp
 
 # Object files
 *.o
