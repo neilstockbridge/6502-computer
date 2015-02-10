@@ -20,6 +20,7 @@
 
 #include "iMX23.h"
 #include "RAM.h"
+#include "serial_port.h"
 
 
 void  clear_screen()
@@ -277,7 +278,7 @@ FILE *log_file = NULL;
 
 
 Device  RAM;
-Device  SerialPort;
+Device  serial_port;
 Device *addressed_device;
 
 
@@ -365,7 +366,7 @@ void static  half_cycle()
 
   fprintf( log_file, "%04i reset:%i clk:%i addr:%04x ddr:%i, data:%02x, da:%i, mi:%i, ca:%04x\n", half_cycles, reset(), clock(), address(), data_direction(), data(), this_device_is_addressed, microprocessor_is == READING, current_address );
   fflush( log_file );
-  //print_status();
+  print_status();
 
   half_cycles += 1;
 }
@@ -399,6 +400,8 @@ void static  perform_reset()
 
 void init()
 {
+  init_serial_port( &serial_port );
+
   pinctrl_block = peripheral_block( PINCTRL_BASE, PINCTRL_SIZE );
   if ( NULL == pinctrl_block )
   {
@@ -441,6 +444,7 @@ void init()
   log_file = fopen("/tmp/simulator.log", "a");
 
   init_RAM( &RAM );
+  load_prg_file("/tmp/ROM.prg");
   drive_pin( RESB, 0 );
   write_data( 0xea ); // NOP
   drive_pin( CLK, 0 );
@@ -471,6 +475,7 @@ void loop()
   //    previously addressed hardware device a chance to tri-state its data bus
   //    drivers.  There could even be a delay, although this may not stricyly
   //    be necessary since this is software and therefore slow
+  poll_serial_port();
 }
 
 
