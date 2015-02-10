@@ -16,6 +16,8 @@ In this example, an ARM SoC:
 
 ![Free run schematic](free-run-schematic.png)
 
+Note that `S1` should be held down while the SoC boots so that the 6502 does not try to drive the address, data or `RWB` lines in case the SoC drives them during boot.
+
 
 On a breadboard:
 
