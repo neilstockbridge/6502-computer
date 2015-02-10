@@ -5,9 +5,6 @@
   - Implement a virtual serial port.  Maybe shut down getty and open ttyAMA0?
     Then simply shuttle bytes back and forth when sent to a ( single) I/O port
 
-  - Watch a .prg file.  If it changes, load it to the specified address
-    ( leaving the rest of RAM alone I guess) and RESET the MCU
-
 */
 
 
@@ -423,17 +420,17 @@ void init()
         // Configure the pin for GPIO rather that any of its alternate functions
         HW_PINCTRL.MUXSEL[ msr].SET = 0x3 << pos; // 0x3 means "GPIO"
         uint8_t  bank = packed_pin >> 5;
-        printf("Configuring CON%i pin%i as ", c, p );
+        //printf("Configuring CON%i pin%i as ", c, p );
         // Enable pull-ups on all pins, which includes: RESET, CLK, D*, and IRQ
         HW_PINCTRL.PULL[ bank].SET = _BV( packed_pin & 0x1f );
 
         if ( is_input( packed_pin) )
         {
-          printf("input\n");
+          //printf("input\n");
           HW_PINCTRL.DOE[ bank].CLR = _BV( packed_pin & 0x1f );
         }
         else {
-          printf("output\n");
+          //printf("output\n");
           HW_PINCTRL.DOE[ bank].SET = _BV( packed_pin & 0x1f );
         }
       }
@@ -443,14 +440,12 @@ void init()
   log_file = fopen("/tmp/simulator.log", "a");
 
   init_RAM( &RAM );
-  load_prg_file("/tmp/ROM.prg");
   drive_pin( RESB, 0 );
   write_data( 0xea ); // NOP
   drive_pin( CLK, 0 );
   drive_pin( IRQB, 1 );
 
   perform_reset();
-
 }
 
 
@@ -475,6 +470,9 @@ void loop()
   //    drivers.  There could even be a delay, although this may not stricyly
   //    be necessary since this is software and therefore slow
   poll_serial_port();
+  int  reloaded = update_RAM();
+  if ( reloaded )
+    perform_reset();
 }
 
 
