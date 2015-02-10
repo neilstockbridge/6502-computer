@@ -19,8 +19,8 @@ $(PROJECT): $(OBJ)
 	$(CC) $(CFLAGS) -o $(PROJECT) $(OBJ)
 
 iMX23.o: Makefile  iMX23.h
-RAM.o: Makefile RAM.h
-main.o: Makefile  iMX23.h  RAM.h
+RAM.o: Makefile  device.h  RAM.h
+main.o: Makefile  iMX23.h  device.h  RAM.h
 
 clean:
 	rm -f $(PROJECT) *.o

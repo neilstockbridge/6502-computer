@@ -1,3 +1,15 @@
+/*
+
+# PLAN
+
+  - Implement a virtual serial port.  Maybe shut down getty and open ttyAMA0?
+    Then simply shuttle bytes back and forth when sent to a ( single) I/O port
+
+  - Watch a .prg file.  If it changes, load it to the specified address
+    ( leaving the rest of RAM alone I guess) and RESET the MCU
+
+*/
+
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -264,6 +276,11 @@ microprocessor_is = READING;
 FILE *log_file = NULL;
 
 
+Device  RAM;
+Device  SerialPort;
+Device *addressed_device;
+
+
 // Prints:
 //  - State of the /RESET line
 //  - State of the CLK line
@@ -304,6 +321,7 @@ void static  half_cycle()
       current_address = address();
       microprocessor_is = data_direction() == HIGH ? READING : WRITING;
       this_device_is_addressed = true;  // FIXME: Change this when there are external peripherals too
+      addressed_device = &RAM;
     }
     else {
       latched_data = data();
@@ -329,7 +347,7 @@ void static  half_cycle()
     {
       if ( this_device_is_addressed  &&  microprocessor_is == READING )
       {
-        write_data( read_from_RAM(current_address) );
+        write_data( addressed_device->read( current_address) );
         drive_the_data_bus();
       }
       else {
@@ -340,7 +358,7 @@ void static  half_cycle()
       if ( this_device_is_addressed  &&  microprocessor_is == WRITING )
       {
         printf("WARNING! The microprocessor is driving the data bus\n");
-        write_to_RAM( current_address, latched_data );
+        addressed_device->write( current_address, latched_data );
       }
     }
   }
@@ -422,7 +440,7 @@ void init()
 
   log_file = fopen("/tmp/simulator.log", "a");
 
-  init_RAM();
+  init_RAM( &RAM );
   drive_pin( RESB, 0 );
   write_data( 0xea ); // NOP
   drive_pin( CLK, 0 );
