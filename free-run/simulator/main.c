@@ -352,38 +352,16 @@ int main( int argc, char *argv[])
     }
   }
 
-  printf("argc:%i\n",argc);
-  if ( 2 <= argc )
-  {
-    printf("DATA:%02x\n", atoi(argv[1]) );
-    write_data( atoi(argv[1]) );
-  }
+  drive_pin( RESB, 0 );
+  write_data( 0xea ); // NOP
+  drive_pin( CLK, 0 );
+  drive_pin( IRQB, 1 );
 
-  if ( 1 == argc ) // i.e. no arguments but the name of the program itself
-  {
-    drive_pin( RESB, 0 );
+  perform_reset();
 
-    while( true )
-    {
-      for( int  i = 0; i <= 255;  i += 1)
-      {
-        write_data( i);
-        usleep( 50*1000);
-      }
-    }
-  }
-  else
+  while( true )
   {
-    drive_pin( RESB, 0 );
-    write_data( 0xea ); // NOP
-    drive_pin( CLK, 0 );
-    drive_pin( IRQB, 1 );
-    perform_reset();
-
-    while( true )
-    {
-      loop();
-    }
+    loop();
   }
 
   return 0;
