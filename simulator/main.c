@@ -232,8 +232,7 @@ bool static  is_input( int8_t  packed_pin )
 
 
 // in microseconds:
-#define  HALF_CYCLE_TIME  ( 500 * 1000 )  // 1Hz
-//#define  HALF_CYCLE_TIME  ( 5 * 1000 ) // 100Hz
+uint32_t  half_cycle_period = 500 * 1000; // 1 Hz
 
 bool      currently_resetting = true;
 uint32_t  half_cycles = 0;
@@ -246,13 +245,6 @@ enum
   READING,
 }
 microprocessor_is = READING;
-
-enum
-{
-  SLOW,
-  FAST,
-}
-speed;
 
 FILE *log_file = NULL;
 
@@ -284,8 +276,8 @@ void  print_status()
 
 void static  half_cycle()
 {
-  if ( speed == SLOW )
-    usleep( HALF_CYCLE_TIME );
+  if ( 0 < half_cycle_period )
+    usleep( half_cycle_period );
   // If the clock is about to RISE..
   //  - The microprocessor may be about to drive the data bus lines so the
   //    simulator should set its data bus pin to High-Z ( INPUT)
@@ -344,12 +336,15 @@ void static  half_cycle()
     }
   }
 
-  if ( speed == SLOW )
+  if ( 1000 <= half_cycle_period ) // 500 Hz
   {
     fprintf( log_file,
       "%04i reset:%i clk:%i addr:%04x ddr:%i, data:%02x, da:%i, mi:%i, ca:%04x\n",
       half_cycles, reset(), clock_line(), address(), data_direction(), data(),
       this_device_is_addressed, microprocessor_is == READING, current_address );
+  }
+  if ( 500*1000 <= half_cycle_period ) // 1 Hz
+  {
     print_status();
   }
 
@@ -411,7 +406,7 @@ void init()
     exit(1);
   }
 
-  if ( speed == SLOW )
+  if ( 500*1000 <= half_cycle_period ) // 1 Hz
     clear_screen();
 
   // Configure the GPIO pins
@@ -451,8 +446,6 @@ void init()
   write_data( 0xea ); // NOP
   drive_pin( CLK, 0 );
   drive_pin( IRQB, 1 );
-
-  printf("Performing reset..\n");
 
   perform_reset();
 }
@@ -500,7 +493,16 @@ void loop()
 
 int main( int argc, char *argv[])
 {
-  speed = 1 == argc ? SLOW : FAST;
+  // The first argument if present specifies the target frequency in Hz.
+  // Specify over 500,000 for fastest operation ( about 12 kHz), or omit for 1
+  // Hz operation.
+  uint32_t  target_frequency = 1;
+  if ( 1 < argc )
+  {
+    target_frequency = atoi( argv[1] );
+  }
+  half_cycle_period = 500*1000 / target_frequency;
+  printf("Target frequency: %u Hz, half_cycle_period:%u\n", target_frequency, half_cycle_period );
 
   init();
 
