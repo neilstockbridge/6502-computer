@@ -12,40 +12,14 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h> // for exit()
-#include <stdarg.h> // for va_list
 #include <time.h>
 #define __USE_BSD
 #include <unistd.h> // for usleep()
 
 #include "iMX23.h"
+#include "ANSI.h"
 #include "RAM.h"
 #include "serial_port.h"
-
-
-void  clear_screen()
-{
-  printf("\033[2J");
-  fflush(stdout);
-}
-
-
-void  clrtoeol()
-{
-  printf("\033[K");
-  fflush(stdout);
-}
-
-
-void  printfat( int line, int column, char *format, ... )
-{
-  va_list  arg_ptr;
-  char     buf[80];
-  va_start( arg_ptr, format );
-  vsnprintf( buf, sizeof(buf), format, arg_ptr );
-  printf("\033[%u;%uH%s", line, column, buf );
-  fflush( stdout );
-  va_end( arg_ptr);
-}
 
 
 #define  LOW   0
@@ -376,7 +350,6 @@ void static  half_cycle()
       "%04i reset:%i clk:%i addr:%04x ddr:%i, data:%02x, da:%i, mi:%i, ca:%04x\n",
       half_cycles, reset(), clock_line(), address(), data_direction(), data(),
       this_device_is_addressed, microprocessor_is == READING, current_address );
-    fflush( log_file );
     print_status();
   }
 
@@ -519,7 +492,6 @@ void loop()
       perform_reset();
     }
     fprintf( log_file, "%u Hz\n", (half_cycles - previous_half_cycle_count) >> 1 );
-    fflush( log_file );
     previous_half_cycle_count = half_cycles;
     when_last_updated = now;
   }

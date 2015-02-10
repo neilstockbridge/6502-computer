@@ -1,7 +1,7 @@
 
 PROJECT=simulator
 
-SRC = iMX23.c RAM.c serial_port.c main.c
+SRC = iMX23.c  ANSI.c  RAM.c  serial_port.c  main.c
 OBJ = $(SRC:.c=.o)
 
 CFLAGS = --std=c99 -Wall -O2
