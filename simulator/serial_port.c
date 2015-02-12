@@ -11,6 +11,7 @@
 
 
 #include "serial_port.h"
+#include "Queue.h"
 
 
 #define  DEVICE   "/dev/ttyAMA0"
@@ -21,16 +22,29 @@
 int             port;
 struct termios  oldtio;
 
-uint8_t  received[16];
-int      rx_cursor = 0;
-uint8_t  to_send[16];
-int      tx_cursor = 0;
+/* Before these queues were corrected they were accidentally LIFOs, which
+   caused this:
+ER
+YDAd
+f008  lxd #fff
+208  tsx
+ 8f  30dl a#bb
+8f  50dl x#9f
+08f  7sj rf769
+8f  a0dl x#00
+8f  c0dl y#0f
+08f  esj rfc7b
+*/
+Queue  receive_queue;
+Queue  send_queue;
 
 
 void static  tidy_up()
 {
   // Restore the configuration of the serial port:
   tcsetattr( port, TCSANOW, &oldtio );
+  printf("RX Q max length: %u\n", receive_queue.max_length );
+  printf("TX Q max length: %u\n", send_queue.max_length );
 }
 
 
@@ -39,13 +53,13 @@ uint8_t  read_from_serial_port( uint16_t address )
   switch ( address & 0x1 )
   {
     case 0x00: // Register 0: Number of bytes available
-      return rx_cursor;
+      return queue_length( &receive_queue);
       break;
 
     case 0x01: // Register 1: Next byte
-      if ( 0 < rx_cursor )
+      if ( 0 < queue_length( &receive_queue) )
       {
-        return received[ --rx_cursor ];
+        return dequeue( &receive_queue);
       }
       else {
         fprintf( stderr, "Attempt to read non-existent data\n");
@@ -59,10 +73,9 @@ uint8_t  read_from_serial_port( uint16_t address )
 
 void  write_to_serial_port( uint16_t address, uint8_t data )
 {
-  if ( tx_cursor < sizeof(to_send) )
+  if ( queue_length(&send_queue) < queue_capacity(&send_queue) )
   {
-    to_send[ tx_cursor] = data;
-    tx_cursor += 1;
+    enqueue( &send_queue, data );
   }
   else {
     fprintf( stderr, "TX buffer overflow\n");
@@ -94,6 +107,9 @@ void  init_serial_port( Device *device )
   tcflush( port, TCIFLUSH );
   tcsetattr( port, TCSANOW, &newtio );
 
+  init_queue( &receive_queue);
+  init_queue( &send_queue);
+
   device->read = read_from_serial_port;
   device->write = write_to_serial_port;
 }
@@ -117,10 +133,9 @@ void  poll_serial_port()
   else if ( outcome )
   {
     outcome = read( port, &data, 1 );
-    if ( rx_cursor < sizeof(received) )
+    if ( queue_length(&receive_queue) < queue_capacity(&receive_queue) )
     {
-      received[ rx_cursor] = data;
-      rx_cursor += 1;
+      enqueue( &receive_queue, data );
     }
     else {
       fprintf( stderr, "RX buffer overflow\n");
@@ -129,9 +144,10 @@ void  poll_serial_port()
   //else
     //printf("No data.\n");
 
-  while ( 0 < tx_cursor )
+  while ( 0 < queue_length(&send_queue) )
   {
-    outcome = write( port, &to_send[--tx_cursor], 1 );
+    uint8_t  data = dequeue(&send_queue);
+    outcome = write( port, &data, 1 );
   }
 }
 

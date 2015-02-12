@@ -2,9 +2,6 @@
 
 # PLAN
 
-  - Implement a virtual serial port.  Maybe shut down getty and open ttyAMA0?
-    Then simply shuttle bytes back and forth when sent to a ( single) I/O port
-
 */
 
 
@@ -471,7 +468,6 @@ void loop()
   //    previously addressed hardware device a chance to tri-state its data bus
   //    drivers.  There could even be a delay, although this may not stricyly
   //    be necessary since this is software and therefore slow
-  poll_serial_port();
 
   // To speed things up ( even though it will result in an irregular clock),
   // only check to updates to the ROM periodically, not even half cycle
@@ -487,6 +483,12 @@ void loop()
     fprintf( log_file, "%u Hz\n", (half_cycles - previous_half_cycle_count) >> 1 );
     previous_half_cycle_count = half_cycles;
     when_last_updated = now;
+  }
+  uint32_t static  when_last_polled = 0; // in half cycles
+  if ( when_last_polled + 1000 < half_cycles )
+  {
+    poll_serial_port();
+    when_last_polled = half_cycles;
   }
 }
 
