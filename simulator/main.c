@@ -343,7 +343,7 @@ void static  half_cycle()
       half_cycles, reset(), clock_line(), address(), data_direction(), data(),
       this_device_is_addressed, microprocessor_is == READING, current_address );
   }
-  if ( 500*1000 <= half_cycle_period ) // 1 Hz
+  if ( 50*1000 <= half_cycle_period ) // 10 Hz
   {
     print_status();
   }
@@ -406,7 +406,7 @@ void init()
     exit(1);
   }
 
-  if ( 500*1000 <= half_cycle_period ) // 1 Hz
+  if ( 50*1000 <= half_cycle_period ) // 10 Hz
     clear_screen();
 
   // Configure the GPIO pins

@@ -101,6 +101,7 @@ int update_RAM()
   // If the file has changed ( or not yet been loaded)
   if ( st.st_mtime != loaded_file_version )
   {
+    sleep(1);
     load_prg_file( ROM_FILE, st.st_size );
     loaded_file_version = st.st_mtime;
     return 1;
