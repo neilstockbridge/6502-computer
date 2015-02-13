@@ -285,7 +285,6 @@ void static  half_cycle()
     bool  clock_is_about_to_rise = (half_cycles & 0x1) == 1;
     if ( clock_is_about_to_rise )
     {
-      sense_the_data_bus();
       // Read the DDR and Address bus lines *before* the clock rises because
       // this software may not be fast enough to sample them after the clock
       // rises
@@ -293,6 +292,8 @@ void static  half_cycle()
       microprocessor_is = data_direction() == HIGH ? READING : WRITING;
       this_device_is_addressed = true;  // FIXME: Change this when there are external peripherals too
       addressed_device = 0xe000 == (current_address & 0xfffe) ? &serial_port : &RAM;
+      if ( ! ( this_device_is_addressed && microprocessor_is == READING) )
+        sense_the_data_bus();
     }
     else {
       latched_data = data();
@@ -320,9 +321,6 @@ void static  half_cycle()
       {
         write_data( addressed_device->read( current_address) );
         drive_the_data_bus();
-      }
-      else {
-        sense_the_data_bus();
       }
     }
     else { // FALLEN
