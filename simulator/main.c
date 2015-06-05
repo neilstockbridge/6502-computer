@@ -290,13 +290,14 @@ void static  half_cycle()
       // rises
       current_address = address();
       microprocessor_is = data_direction() == HIGH ? READING : WRITING;
-      this_device_is_addressed = true;  // FIXME: Change this when there are external peripherals too
-      addressed_device = 0xe000 == (current_address & 0xfffe) ? &serial_port : &RAM;
       if ( ! ( this_device_is_addressed && microprocessor_is == READING) )
         sense_the_data_bus();
+      this_device_is_addressed = true;  // FIXME: Change this when there are external peripherals too
+      addressed_device = 0xe000 == (current_address & 0xfffe) ? &serial_port : &RAM;
     }
     else {
-      latched_data = data();
+      if ( microprocessor_is == WRITING )
+        latched_data = data();
     }
   }
 

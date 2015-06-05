@@ -12,6 +12,7 @@ void  init_queue( Queue *q )
   q->head = 0;
   q->tail = 0;
   q->max_length = 0;
+  q->overflowed = false;
 }
 
 
