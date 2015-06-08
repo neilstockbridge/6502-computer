@@ -5,7 +5,7 @@
 #
 
 # from data-sheet                   fromDS  bytes cycles  C (for addr. may be used as index to M[] again dep on instr)
-addressing_modes = <<"."
+addressing_modes = <<".".split("\n")
 absolute                            a       2     4m      i2 << 8 | i1
 absolute-indexed-indirect           (a,x)   2     5       M[ ( i2 << 8 | i1 ) + X ]
 absolute-indexed-with-X             a,x     2     4pm     ( i2 << 8 | i1 ) + X
@@ -27,8 +27,8 @@ zero-page-indirect-indexed-with-Y   (zp),y  1     5       M[ i1 ] + Y
 # m: +2 cycles for read-modify-write instructions
 # p: +1 cycle if page boundary is crossed when forming address
 
-opcodes = <<".".reject {|line| "----------\n" == line }
-brk a
+opcodes = <<".".split("\n").reject {|line| "----------" == line }
+brk #
 ora (zp,x)
 -
 -
@@ -324,6 +324,7 @@ opcode_mode_ids = []     # Lookup table from OpCode to index in the "addressing_
 
 opcodes.each_with_index do |line, opcode| line.chomp!
   mnemonic, mode_id = line.split
+  mode_id ||= "i" # Pretend that missing intructions use the "implied" addressing mode
   # Rename the SMBx, RMBx, BBRx, BBSx mnemonics so they a) fit in to 3
   # characters, and b) match the Set/Clear convention of the original
   mnemonic.sub! /smb([0-7])/, 'se\1'
@@ -355,7 +356,7 @@ opcode_mnemonic_ids.each_with_index do |mnemonic_id, opcode|
   print opcode + 1 & 0xf != 0 ? "," : "\n"
 end
 
-puts "; Lookup table that maps OpCode to index in @ADDRESSING_MODES"
+puts "; Lookup table that maps OpCode to addressing mode ID.  FIXME: Pack in to nybbles"
 puts "@OPCODE_ADDRESSING_MODE_IDS:"
 opcode_mode_ids.each_with_index do |mode_id, opcode|
   print "  .byt " if 0 == opcode & 0xf
