@@ -3,6 +3,11 @@ R1 is a system with a real 6502 but with everything else simulated by two AVRs. 
 
 ![R1](R1.jpg)
 
+  - The header in the top-left corner is the SPI bus
+  - The UART header at the top is the simulated UART available to the 6502
+  - The UART header in the  bottom-left corner is the Admin UART for control of the system
+  - The improvised jumper blocks wire the AVRs to the SPI bus in the left-hand position or allow ISP in the right-hand position
+
   - [gEDA gschem schematic](R1.sch)
   - [gEDA PCB layout](R1.pcb)
 
