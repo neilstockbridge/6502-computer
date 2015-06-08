@@ -1,6 +1,7 @@
 
 free-run/simulator/simulator
 simulator/simulator
+ROM/dude/dude
 **/*.swp
 
 # Object files
@@ -8,6 +9,7 @@ simulator/simulator
 *.ko
 *.obj
 *.elf
+*.map
 
 # Precompiled Headers
 *.gch
