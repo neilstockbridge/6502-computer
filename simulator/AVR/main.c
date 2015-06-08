@@ -50,7 +50,7 @@ Looks like the maximum speed ( at least with C and -O2) would be 250 kHz
 #include <util/setbaud.h>
 
 
-#define  _SPI_DEBUG
+//#define  _SPI_DEBUG
 #define  _EEPROM_DEBUG
 
 
@@ -407,7 +407,11 @@ typedef enum
   RELEASE_RESB,
   SELECT_SLAVE_0 = 0x10,
   RELEASE_SLAVE= 0x17,
-  SEND_VIA_UART = 0x42,
+
+  QUERY_UART_STATUS = 0x40,
+  CONFIGURE_UART,
+  DEQUEUE_UART_DATA,
+  SEND_VIA_UART,
 }
 Request;
 
@@ -416,9 +420,11 @@ Request;
 //
 uint8_t  spi_exchange( uint8_t  data_to_send )
 {
+  #ifdef _SPI_DEBUG
   send_str("SPIX ");
   send_byte_as_hex( data_to_send );
   send_eol();
+  #endif
 
   // Select the Slave AVR
   drive_low( SS_PORT, SSA );
@@ -552,6 +558,8 @@ void  SPI_write( uint8_t data )
       // Currently the 6502 does not communicate directly with the Slave AVR,
       // so Slave#7 can be used to indicate that no slave should be selected
       spi_exchange( (slave_id < 7) ? (SELECT_SLAVE_0 + slave_id) : RELEASE_SLAVE );
+
+        // FIXME: The RELEASE_SLAVE message will go to the selected slave as well as the slave AVR.  Perhaps the slave AVR could auto release the /SS? line when IT is selected
       }
       break;
   }
@@ -652,17 +660,15 @@ uint8_t  UART_read()
   switch ( address_lo & 0x1 ) // & to simulate only low-order address lines being connected to Register Select lines
   {
     case 0x00:
-      {
-      uint8_t  status = UCSR0A;
-      return  level_at(status, UDRE0) << 1 | level_at(status, RXC0);
-      }
+      spi_exchange( QUERY_UART_STATUS );
+      return spi_exchange( POLL );
 
     // The Slave doesn't have a way to interrupt the Master, and the master doesn't poll, so the slave queues.  it might:
     //  a) interrupt the 6502, in which case would 115,200 be enough to ever result in a queue length > 1?
     //  b) not interrupt, in which case the 6502 polls and queueing is definitely required ( probably good.  10 Hz is enough for UI update)
-    // FIXME:
     case 0x01:
-      return UDR0;
+      spi_exchange( DEQUEUE_UART_DATA );
+      return spi_exchange( POLL );
   }
   return 0xff; // Will never happen but compiler doesn't know that
 }

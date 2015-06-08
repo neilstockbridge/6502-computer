@@ -101,13 +101,19 @@ typedef enum
   RELEASE_RESB,
   SELECT_SLAVE_0 = 0x10,
   //RELEASE_SLAVE= 0x17,
-  SEND_VIA_UART = 0x42,
+
+  QUERY_UART_STATUS = 0x40,
+  CONFIGURE_UART,
+  DEQUEUE_UART_DATA,
+  SEND_VIA_UART,
 }
 Request;
 
 
 Queue  from_SPI; // Received via SPI and waiting for UART
 Queue  from_UART; // Received via UART and waiting for SPI
+
+#define  debugging_SPI  false
 
 
 #include <avr/pgmspace.h>
@@ -274,10 +280,10 @@ void static  init()
 
 enum
 {
-  EXPECT_REQUEST,
-  EXPECT_UART_TX_DATA,
+  EXPECTING_REQUEST,
+  EXPECTING_DATA_FOR_UART,
 }
-state = EXPECT_REQUEST;
+state = EXPECTING_REQUEST;
 
 
 void static  loop()
@@ -292,11 +298,12 @@ void static  loop()
   // WARNING: -fshort-enums is required so that the enum consumes only a single byte!
   if ( dequeued_safely( &from_SPI, &data) )
   {
-    report("RXSPI:", data );
+    if ( debugging_SPI )
+      report("RXSPI:", data );
 
     switch ( state )
     {
-      case EXPECT_REQUEST:
+      case EXPECTING_REQUEST:
         switch ( (Request)data )
         {
           case POLL:
@@ -313,8 +320,25 @@ void static  loop()
           case SELECT_SLAVE_0:
             break;
 
+          case QUERY_UART_STATUS:
+            // Bit 0: 1:Received data in queue
+            // Bit 1: 0:Busy.  Do not send
+            send_byte_via_SPI( UART_is_ready_to_send() << 1  |  ( 0 < queue_length(&from_UART) ? 1 : 0 ) );
+            break;
+
+          case CONFIGURE_UART:
+            break;
+
+          case DEQUEUE_UART_DATA:
+            {
+              uint8_t  data = 0xff;
+              dequeued_safely( &from_UART, &data ); // If nothing to dequeue then data remains 0xff
+              send_byte_via_SPI( data );
+            }
+            break;
+
           case SEND_VIA_UART:
-            state = EXPECT_UART_TX_DATA;
+            state = EXPECTING_DATA_FOR_UART;
             break;
     /*
           case 0xff: // Status report
@@ -333,17 +357,18 @@ void static  loop()
         }
         break;
 
-      case EXPECT_UART_TX_DATA:
+      case EXPECTING_DATA_FOR_UART:
         send_byte_via_UART( data );
-        state = EXPECT_REQUEST;
+        state = EXPECTING_REQUEST;
         break;
     }
   }
-
+/*
   if ( dequeued_safely( &from_UART, &data) )
   {
     send_status_report();
   }
+  */
 }
 
 
