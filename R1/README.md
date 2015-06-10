@@ -28,7 +28,7 @@ R1 is a system with a real 6502 but with everything else simulated by two AVRs. 
 
   - All 16 address lines are sampled by the master AVR allowing the full 64K of address space to be simulated
 
-  - The master AVR has a "control" UART that can be used by a PC to control the system.  Bus devices could be simulated ( slowly) on a PC over this link.
+  - The master AVR has an "Admin" UART that can be used by a PC to control the system.  Bus devices could be simulated ( slowly) on a PC over this link
 
   - Simulated bus devices:
     - 15K RAM.  The master AVR has 16K but needs some for itself
@@ -40,6 +40,7 @@ R1 is a system with a real 6502 but with everything else simulated by two AVRs. 
     - Potentially others:
       - Timers in the master AVR ( although since the master AVR doesn't drive `IRQB` it would have to ask the slave to interrupt the 6502)
       - Hardware multiplier
+      - Blitter
 
 The first boards had problems requiring rework:
 
