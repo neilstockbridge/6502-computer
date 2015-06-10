@@ -6,18 +6,15 @@
   ; code.  The "SP" is then decremented so that nested callers also get space.
   ; A bit like a stack frame for local variables but in ZP
 
-  map_ptr         = $02
+  zp_sp           = $02   ; Zero-Page Stack Pointer
+  map_ptr         = $03
   brk_sp          = $05
   dump_ptr        = $22   ; A cursor for dumping routines
-  lines_to_dump   = $fd   ; A counter of the number of lines remaining to dump
-  printfu_y_safe  = $fb
-  dump_regs_mask  = $fb
-  printfu_flags   = $fc
+  lines_to_dump   = $10   ; A counter of the number of lines remaining to dump
+  printfu_y_safe  = $11
+  dump_regs_mask  = $11
+  printfu_flags   = $12
   cmdline_stream  = $24
   mnemonic_stream = $24   ; OK to reuse cmdline_stream
-  tmp0 = $fb
-  tmp1 = $fc
-  tmp2 = $fd
-  tmp3 = $fe
   tmp_ptr0 = $00
 

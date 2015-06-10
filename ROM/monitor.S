@@ -7,7 +7,6 @@
 
 ; PLAN
 ;   - Zero-page stack idea
-;   - Disassembly
 ;   - Breakpoints
 ;   - Single step
 ;   - memset - at least for individual bytes
@@ -38,7 +37,7 @@
 ;     execution.  Would likely need to switch it on and off to capture the
 ;     trouble section only otherwise too much output to wade through
 
-.import UART_getc, UART_putc
+.import UART_getc, UART_putc, zps_init, zps_phay, zps_release2
 
 getc = UART_getc
 putc = UART_putc
@@ -78,6 +77,8 @@ reset_handler:
 init:
   ldx #$ff  ; Initialize the stack pointer
   txs
+
+  jsr zps_init
 
   lda #<dump_instructions      ; Default dump interpretation
   ldx #>dump_instructions
@@ -268,9 +269,35 @@ request:
 
 @maybe_dump_registers:
   cmp #$72             ; 'r'
-  bne @maybe_continue
+  bne @maybe_write
 
   jmp dump_registers
+
+@maybe_write:
+  cmp #$77          ; 'w'
+  bne @maybe_continue
+
+;  jsr parse_hex8      ; Parse the HI byte of the address to write to
+;  tay
+;  jsr parse_hex8      ; Parse the LO byte
+;  jsr zps_phay        ; Put the pointer to the address to write to on the ZP stack
+;  jsr parse_hex8      ; Parse the byte to be written
+;
+;  ldx zp_sp           ; Write the byte to the specified address
+;  sta ($01,x)
+;
+;  jsr zps_release2
+
+  ; A good test of ZPS but is faster *and* more compact like this:
+  jsr parse_hex8
+  sta @write_addr+2
+  jsr parse_hex8
+  sta @write_addr+1
+  jsr parse_hex8
+@write_addr:
+  sta $ffff
+
+  rts
 
 @maybe_continue:
   cmp #$63          ; 'c'
@@ -667,9 +694,9 @@ dump_instructions:
   @absolute_indexed_with_x:           .byt @phex16,",x",0       ; lda $1234,x
   @absolute_indexed_with_y:           .byt @phex16,",y",0       ; lda $1234,y
   @absolute_indirect:                 .byt "(",@phex16,")",0    ; jmp ($1234)
-  @immediate:                         .byt "#",@phex8,0        ; lda #$12
-  @zero_page:                         .byt @phex8,0            ; lda $34
-  @zero_page_indexed_indirect:        .byt "(",@phex8,",x)"     ; lda ($34,x)
+  @immediate:                         .byt "#",@phex8,0         ; lda #$12
+  @zero_page:                         .byt @phex8,0             ; lda $34
+  @zero_page_indexed_indirect:        .byt "(",@phex8,",x)",0   ; lda ($34,x)
   @zero_page_indexed_with_x:          .byt @phex8,",x",0        ; lda $34,x
   @zero_page_indexed_with_y:          .byt @phex8,",y",0        ; lda $34,y
   @zero_page_indirect:                .byt "(",@phex8,")",0     ; lda ($34)
