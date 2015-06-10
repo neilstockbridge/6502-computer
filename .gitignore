@@ -3,6 +3,9 @@ free-run/simulator/simulator
 simulator/simulator
 ROM/dude/dude
 **/*.swp
+**/*.sch~
+**/#*.sch#
+**/*.pcb-
 
 # Object files
 *.o
