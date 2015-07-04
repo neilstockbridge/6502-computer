@@ -49,6 +49,18 @@ void  init_SPI()
 //
 ISR( PCINT_vect)
 {
+  // If this device is selected then MISO should be driven by this device
+  // otherwise it should be allowed to float ( externally pulled up weakly so
+  // that this code doesn't have to fuss with enabling the pull-up each time
+  // the driver is disabled)
+  if ( LOW == level_at( SSA_PORT, SSA ))
+  {
+    SPI_slave_select_asserted();
+    drive_MISO();
+  }
+  else {
+    float_MISO();
+  }
   reset_counter();
 }
 

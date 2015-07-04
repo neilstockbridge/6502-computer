@@ -49,6 +49,8 @@ Looks like the maximum speed ( at least with C and -O2) would be 250 kHz
 #define BAUD 38400
 #include <util/setbaud.h>
 
+#include "Request.h"
+
 
 //#define  _SPI_DEBUG
 #define  _EEPROM_DEBUG
@@ -153,6 +155,11 @@ Device;
 uint8_t   address_hi = 0x00;
 uint8_t   address_lo = 0x00;
 #define  address  ( (uint16_t)address_hi << 8 | address_lo )
+
+
+#define  NO_SLAVE_SELECTED  7
+
+uint8_t volatile  selected_slave_id = NO_SLAVE_SELECTED;
 
 
 // --------------------------------------------------------------- simulated RAM
@@ -400,22 +407,6 @@ void static  init_Master_UART()
 
 // --------------------------------------------------------------- simulated SPI
 
-typedef enum
-{
-  POLL,
-  ASSERT_RESB,
-  RELEASE_RESB,
-  SELECT_SLAVE_0 = 0x10,
-  RELEASE_SLAVE= 0x17,
-
-  QUERY_UART_STATUS = 0x40,
-  CONFIGURE_UART,
-  DEQUEUE_UART_DATA,
-  SEND_VIA_UART,
-}
-Request;
-
-
 // @return  The data received
 //
 uint8_t  spi_exchange( uint8_t  data_to_send )
@@ -530,6 +521,9 @@ void  SPI_write( uint8_t data )
 
     case 0x02: // Clock rate
       {
+        // FIXME: If the 6502 changes the clock rate then it affects inter-AVR
+        // exchanges too.  Perhaps maintain a set of shadow registers for the
+        // 6502's configuration of the Master AVR's SPI peripheral
         uint8_t  divisor = data & 0x7;
         uint8_t  spr;
         bool     dbl;
@@ -557,9 +551,14 @@ void  SPI_write( uint8_t data )
       uint8_t  slave_id = data & 0x7;
       // Currently the 6502 does not communicate directly with the Slave AVR,
       // so Slave#7 can be used to indicate that no slave should be selected
-      spi_exchange( (slave_id < 7) ? (SELECT_SLAVE_0 + slave_id) : RELEASE_SLAVE );
+      //spi_exchange( (slave_id < 7) ? (SELECT_SLAVE_0 + slave_id) : RELEASE_SLAVE );
+      // Optimised ( because RELEASE_SLAVE is the same as SELECT_SLAVE_0 + 7)
+      spi_exchange( SELECT_SLAVE_0+ slave_id );
 
-        // FIXME: The RELEASE_SLAVE message will go to the selected slave as well as the slave AVR.  Perhaps the slave AVR could auto release the /SS? line when IT is selected
+      // Remember which slave is selected ( if any) so that UART operations
+      // ( and any other in future that involve communication with the slave
+      // AVR) may be buffered
+      selected_slave_id = slave_id;
       }
       break;
   }
@@ -657,6 +656,7 @@ void  UART_write( uint8_t  data )
 //
 uint8_t  UART_read()
 {
+  // FIXME: Buffer all access to the UART if an off-board slave is selected
   switch ( address_lo & 0x1 ) // & to simulate only low-order address lines being connected to Register Select lines
   {
     case 0x00:
@@ -675,6 +675,7 @@ uint8_t  UART_read()
 
 void  UART_write( uint8_t  data )
 {
+  // FIXME: Buffer all access to the UART if an off-board slave is selected
   switch ( address_lo & 0x1 ) // & to simulate only low-order address lines being connected to Register Select lines
   {
     case 0x00:

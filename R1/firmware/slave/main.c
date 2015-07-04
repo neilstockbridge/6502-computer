@@ -87,43 +87,34 @@ To reproduce:
 
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
+#include <avr/pgmspace.h>
 
 #include "Queue.h"
 #include "UART.h"
 #include "SPI.h"
 #include "pinout.h"
-
-
-typedef enum
-{
-  POLL,
-  ASSERT_RESB,
-  RELEASE_RESB,
-  SELECT_SLAVE_0 = 0x10,
-  //RELEASE_SLAVE= 0x17,
-
-  QUERY_UART_STATUS = 0x40,
-  CONFIGURE_UART,
-  DEQUEUE_UART_DATA,
-  SEND_VIA_UART,
-}
-Request;
+#include "Request.h"
 
 
 Queue  from_SPI; // Received via SPI and waiting for UART
 Queue  from_UART; // Received via UART and waiting for SPI
 
-#define  debugging_SPI  false
+//#define  debugging_SPI
 
-
-#include <avr/pgmspace.h>
-
-#define  send_str( s )  _send_str(PSTR(s))
 
 #define  NUL  '\0'
 
+
+void  byte_received_via_UART( uint8_t  data )
+{
+  enqueue( &from_UART, data );
+}
+
+
 // Sends the given message from program memory over the serial link.
 //
+#define  send_str( s )  _send_str(PSTR(s))
+
 void static  _send_str( char const *s )
 {
   while ( true)
@@ -136,7 +127,7 @@ void static  _send_str( char const *s )
   }
 }
 
-
+/*
 // Sends the hexadecimal representation of the given byte over the serial link.
 //
 void static  send_byte_as_hex( uint8_t value)
@@ -157,7 +148,7 @@ void static  send_eol()
 
 #define  report( aspect, value )  _report( PSTR( aspect), value )
 
-void  _report( char const *aspect, uint8_t  value )
+void static  _report( char const *aspect, uint8_t  value )
 {
   _send_str( aspect );
   send_byte_as_hex( value );
@@ -167,7 +158,7 @@ void  _report( char const *aspect, uint8_t  value )
 
 #define  report_bool( aspect, value )  _report_bool( PSTR( aspect), value )
 
-void  _report_bool( char const *aspect, bool  value )
+void static _report_bool( char const *aspect, bool  value )
 {
   _send_str( aspect);
   send_byte_via_UART( value ? 't' : 'f');
@@ -175,7 +166,7 @@ void  _report_bool( char const *aspect, bool  value )
 }
 
 
-void  send_status_report()
+void static  send_status_report()
 {
   Queue *qs[] = { &from_SPI, &from_UART };
   for(int i=0;i<2;i++)
@@ -189,6 +180,13 @@ void  send_status_report()
     report("  max_length: ", q->max_length );
   }
 }
+*/
+
+#define  NO_SLAVE_SELECTED  7
+
+// This is accessed both from within interrupts ( SPI_slave_select_asserted())
+// and from the main thread, hence volatile
+uint8_t volatile  selected_slave_id = NO_SLAVE_SELECTED;
 
 
 void  byte_received_via_SPI( uint8_t  data )
@@ -197,9 +195,50 @@ void  byte_received_via_SPI( uint8_t  data )
 }
 
 
-void  byte_received_via_UART( uint8_t  data )
+// When this ( the slave) AVR is selected as an SPI slave ( by the master) then
+// any ( external) SPI bus slave should be de-selected otherwise it will a)
+// receive the byte that the master is about to send, and b) try to drive the
+// MISO line in contention with this AVR.  FIXME: This is a problem: The 6502
+// decides when to release an external slave and may have selected a slave and
+// be in the middle of an SPI transaction.  The master could keep track of
+// whether any slave is selected or not and avoid interrupting transactions.
+// This would mean that the master could not request that IRQB be asserted and
+// would have to buffer bytes outgoing via the UART and pretend that no bytes
+// have been received via the UART until the 6502 SPI TX is complete.
+//
+void  SPI_slave_select_asserted()
 {
-  enqueue( &from_UART, data );
+  // SS0..3 are on PB0..3
+  // SS4..6 are on PD4..6
+  if ( NO_SLAVE_SELECTED == selected_slave_id )
+  {
+    // Nothing to do.  Great!
+  }
+  else if ( selected_slave_id <= 3 )
+  {
+    drive_high( PORTB, selected_slave_id);
+  }
+  else {
+    drive_high( PORTD, selected_slave_id);
+  }
+}
+
+
+// There's no need to release any previously selected slave because any
+// selected device would have been released as soon as this device was
+// selected to deliver the request to select a slave.
+//
+void static  select_slave( uint8_t  slave_id )
+{
+  if ( slave_id <= 3 )
+  {
+    drive_low( PORTB, slave_id);
+  }
+  else {
+    drive_low( PORTD, slave_id);
+  }
+  // Remember which slave is selected so that it may be released later on
+  selected_slave_id = slave_id;
 }
 
 
@@ -245,7 +284,7 @@ void static  init()
        | DRIVE( SS6 )
        ;
   DDRB = SENSE( SCK )
-       | DRIVE( MISO )
+       | SENSE( MISO ) // Until this device is selected
        | SENSE( MOSI )
        | SENSE( SSA )
        | DRIVE( SS3 )
@@ -298,8 +337,9 @@ void static  loop()
   // WARNING: -fshort-enums is required so that the enum consumes only a single byte!
   if ( dequeued_safely( &from_SPI, &data) )
   {
-    if ( debugging_SPI )
+    #ifdef debugging_SPI
       report("RXSPI:", data );
+    #endif
 
     switch ( state )
     {
@@ -318,6 +358,18 @@ void static  loop()
             break;
 
           case SELECT_SLAVE_0:
+          case SELECT_SLAVE_1:
+          case SELECT_SLAVE_2:
+          case SELECT_SLAVE_3:
+          case SELECT_SLAVE_4:
+          case SELECT_SLAVE_5:
+          case SELECT_SLAVE_6:
+            select_slave( data - SELECT_SLAVE_0);
+            break;
+
+          case RELEASE_SLAVE:
+            // This is a no-op since the off-board slave was released
+            // automatically as soon as this device was selected
             break;
 
           case QUERY_UART_STATUS:

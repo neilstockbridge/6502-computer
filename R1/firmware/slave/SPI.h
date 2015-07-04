@@ -26,5 +26,10 @@ void  send_byte_via_SPI( uint8_t  data )
 ;
 
 
+extern
+void  SPI_slave_select_asserted()
+;
+
+
 #endif
 

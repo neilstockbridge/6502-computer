@@ -28,20 +28,30 @@
 #define  SS2        PB2
 #define  SS3        PB3
 #define  SSA        PB4
+#define  SSA_PORT   PINB
 #define  MOSI       PB5
+#define  MISO_DDR   DDRB
 #define  MISO       PB6
 #define  SCK        PB7
 
-#define  LOW  0
-#define  HIGH  1
-#define  SENSE( pin )  ( 0 << pin )
-#define  DRIVE( pin )  ( 1 << pin )
-#define  PULL_UP( pin )  ( 1 << pin )
-#define  drive_low( port, pin )  port &= ~_BV( pin )
-#define  drive_high( port, pin )  port |= _BV( pin )
+#define  set_bit( location, bit)    location |= _BV( bit)
+#define  clear_bit( location, bit)  location &= ~_BV( bit)
 
-#define  assert_RESB()  drive_low( RESB_PORT, RESB )
-#define  release_RESB()  drive_high( RESB_PORT, RESB )
-#define  assert_IRQB()  ( IRQB_DDR |= DRIVE( IRQB) )
-#define  release_IRQB()  ( IRQB_DDR &= ~DRIVE( IRQB) )
+#define  LOW    0
+#define  HIGH   1
+
+#define  SENSE( pin)    ( 0 << pin )
+#define  DRIVE( pin)    ( 1 << pin )
+#define  PULL_UP( pin)  ( 1 << pin )
+
+#define  level_at( port, pin)     ( (port >> pin) & 0x1 )
+#define  drive_low( port, pin)    clear_bit( port, pin)
+#define  drive_high( port, pin)   set_bit( port, pin)
+
+#define  assert_RESB()    drive_low( RESB_PORT, RESB )
+#define  release_RESB()   drive_high( RESB_PORT, RESB )
+#define  assert_IRQB()    ( IRQB_DDR |= DRIVE( IRQB) )
+#define  release_IRQB()   ( IRQB_DDR &= ~DRIVE( IRQB) )
+#define  drive_MISO()     set_bit( MISO_DDR, MISO )
+#define  float_MISO()     clear_bit( MISO_DDR, MISO )
 
