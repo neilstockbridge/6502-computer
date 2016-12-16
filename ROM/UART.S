@@ -1,7 +1,8 @@
 
-.export UART_getc, UART_putc
+.export UART_getc
+.export UART_putc
 
-UART_BASE =   $2100
+UART_BASE =   $e108
 UART_STATUS = UART_BASE
 UART_SEND =   UART_BASE+1
 UART_RECV =   UART_BASE+1
@@ -33,7 +34,7 @@ UART_getc:
 UART_putc:
   pha
 : lda UART_STATUS   ; Wait until the transmit buffer is ready
-  and #%00000010    ; 0:Busy
+  and #%00010000    ; 0:Busy
   beq :-
   pla
   sta UART_SEND

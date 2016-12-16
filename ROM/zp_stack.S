@@ -2,7 +2,7 @@
 ; A data stack in Zero Page.
 ;
 ; The stack pointer might be kept at $0002, initialized to $ff and works in the
-; same way the hardware stack:
+; same way as the hardware stack:
 ;
 ;   1) Write
 ;   2) Decrement
@@ -12,21 +12,7 @@
 ;
 ; Compared to the hardware stack both performance and code density suffer
 ; although it does allow efficient and even re-entrant use of ZP scratch space.
-
-.include "zero-page.inc"
-
-.export zps_init, zps_phay, zps_release2
-
-; @return  X  The newly adjusted Zero-Page Stack Pointer, which begins as $ff
-;             ( referring to ZP address $00ff) and points not to the data most
-;             recently pushed but to the slot that will be used *next*
 ;
-zps_init:
-  ldx #$ff
-  stx zp_sp
-  rts
-
-
 ; There are multiple options for accessing the stack
 ;
 ;   - Unrolled for performance:
@@ -47,47 +33,99 @@ zps_init:
 ;       jsr zps_phy
 ;
 
-; @return  X  The newly adjusted Zero-Page Stack Pointer
+.export zps_init
+.export zps_alloc
+.export zps_alloc2
+.export zps_pha
+.export zps_phya
+.export zps_release
+.export zps_release2
+
+.include "globals.S"
+
+
+; Initializes the Zero Page Stack.
+;
+; @return  X  The newly adjusted Zero-Page Stack Pointer, which begins as $ff
+;             ( referring to ZP address $00ff) and points not to the data most
+;             recently pushed but to the slot that will be used *next*
+;
+zps_init:
+  ldx #$ff
+  stx zp_sp
+  rts
+
+
+zps_alloc2:
+  dec zp_sp
+  ; Fall through
+
+
+zps_alloc:
+  dec zp_sp
+  rts
+
+
+; @return     X     The address in ZP of the data just pushed
 ;
 zps_pha:
-  phx
-  dec zp_sp
-  ldx zp_sp
-  sta $01,x
-  plx
+  ldx zp_sp ; 2 3
+  sta $00,x
+  dec zp_sp ; 2 5
   rts
 
 
 ; Pushes a 16-bit pointer to the stack.
-; @param  A   LO
-; @param  Y   HI
 ;
-zps_phay:
-  phx
+; @param      A     LO byte of the pointer
+; @param      Y     HI byte of the pointer
+; @return     X     The address in ZP of the LSB just pushed
+; @destroys   None
+;
+zps_phya:
 
-  ;dec zp_zp ; 2  5
-  ;dec zp_zp ; 2  5
   ;ldx zp_sp ; 2  3
-             ; 6 13
+  ;dex       ; 1  2
+  ;dex       ; 1  2
+  ;stx zp_sp ; 2  3
+  ;inx       ; 1  2
+  ;          ; 7 12
 
-  ldx zp_sp ; 2  3
-  dex       ; 1  2
-  dex       ; 1  2
-  stx zp_sp ; 2  3
-            ; 6 10
+  ;ldx zp_sp ; 2  3
+  ;dex       ; 1  2
+  ;stx zp_sp ; 2  3
+  ;dec zp_zp ; 2  5
+  ;            7 13
 
-  sta $01,x
-  sty $02,x
+  ;dec zp_sp ; 2  5
+  ;ldx zp_sp ; 2  3
+  ;dec zp_sp ; 2  5
+  ;          ; 6 13
 
-  plx
-  rts
+  ;sta $00,x
+  ;sty $01,x
+  ;rts
+
+  ldx zp_sp ; 2 3
+  sty $00,x
+  dec zp_sp ; 2 5
+  bra zps_pha
 
 
+; Releases two bytes from the top of the stack.
+;
+; @destroys   None
+;
 zps_release2:
 
   inc zp_sp
   ; Falls through to zps_release
 
+
+; Releases a byte from the top of the stack.
+;
+; @destroys   None
+;
 zps_release:
   inc zp_sp
   rts

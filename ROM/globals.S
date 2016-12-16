@@ -18,3 +18,28 @@
   mnemonic_stream = $24   ; OK to reuse cmdline_stream
   tmp_ptr0 = $00
 
+
+.macro  phaxy
+  pha
+  phx
+  phy
+.endmacro
+
+
+.macro  plyxa
+  ply
+  plx
+  pla
+.endmacro
+
+
+.macro  ldya value_for_y, value_for_a
+  ldy #value_for_y
+  lda #value_for_a
+.endmacro
+
+
+; printfu string interpolation:
+I_HEX8 =  %10010000  ; Interpolate 8-bit hexadecimal
+I_HEX16 = %10110100  ; Interpolate 16-bit hexadecimal
+

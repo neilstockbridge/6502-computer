@@ -1,4 +1,9 @@
 
+; PLAN
+; - erase 4K flash (done but reenable coment and test)
+; - read: done
+; - write: need in order to test erase since flash is already erased
+
 ; A monitor program driven by a VT100 ; terminal ( perhaps using ANSI escape
 ; codes) over a serial terminal.
 ;
@@ -19,6 +24,7 @@
 ; MONITOR COMMANDS
 ; d1234     DUMP memory from address 1234;  Omit address to continue disassembly from where left off
 ; ih        Change Dump mode INTERPRETATION to h:HEX, a:ASCII, i:instructions
+; w123456   Write 0x56 to address 0x1234
 ; c[AAAA]   Continue from BRK ( or to specified address)
 ; bl        BREAKPOINT LIST
 ; bs0,1234  BREAKPOINT, SET #0 at address 1234.  Two bytes at address are saved in slot #0 and replace with BRK #0
@@ -27,6 +33,18 @@
 ; s         Single Step
 ; a 1234    Begin assembly at 1234
 ; ?         memset, memmove, directory, load/save region to/from file
+; wAAAAdd   Write dd to address AAAA
+; t         Test
+; ss        Select SPI slave
+; sRR       Make request RR of selected SPI device
+; sr        Release SPI slave
+; spN       "Pump" N bytes from SPI device
+; fi        Show SPI flash unique ID
+; faAAAA    Set address to use within flash to AAAAxx or AAAIxx for erase (I: still specified but ignored)
+; fbAAAA    Set address within RAM to use as the buffer for reading from and writing to flash
+; fr        Read 256 bytes from SPI flash to RAM
+; fw        Write 256 bytes from RAM to SPI flash
+; fe        Erase 4K page at stored address
 ;
 ;
 ; # Ideas
@@ -37,37 +55,67 @@
 ;     execution.  Would likely need to switch it on and off to capture the
 ;     trouble section only otherwise too much output to wade through
 
-.import UART_getc, UART_putc, zps_init, zps_phay, zps_release2
+; Export these so that they apear in the label file (so the disassembler can use them)
+.export map
+.export index
+.export reset_handler
+.export irq_handler
+.export nmi_handler
+.export init
+.export main
+.export cmdline
+.export cursor
+.export request
+.export brk_handler
+.export dump_registers
+.export set_dump_func
+.export dump
+.export dump_hex
+.export dump_ascii
+.export dump_instructions
+.export trace
+
+.import inc_zp_ptr
+.import advance_zp_ptr
+.import adjust_zp_ptr
+.import read_from_stream
+.import zps_init
+.import zps_pha
+.import zps_phya
+.import zps_release2
+.import UART_getc
+.import UART_putc
+.import SPI_select
+.import SPI_exchange
+.import SPI_release
+.import parse_hex4
+.import parse_hex8
+.import print_space
+.import write_eol
+.import pstr
+.import write_cstr
+.import write_ansi_color
+.import printfu
+.import phex16
+.import phex8
+.import phex4
+.import power_up_SPI_flash
+.import read_SPI_flash_unique_identifier
+.import read_SPI_flash_page
+.import erase_4K_of_SPI_flash
+.import write_SPI_flash_page
+.import test
+.import show_A
 
 getc = UART_getc
 putc = UART_putc
 
-.export printfu, phex8, phex4, pstr, print_space, con_next_line, map, index, read_from_stream, add_to_ptr, inc_ptr ; so that they apear in the label file
-.export reset_handler, irq_handler, nmi_handler
-.export init, main, cmdline, cursor, request, brk_handler, dump_registers, set_dump_func, dump, dump_hex, dump_ascii, dump_instructions, trace, check_equal, check_carry, check_equal, check_carry
-.if .defined(test)
-.export test
-.endif
 .if .defined(dump_sp)
 .export dump_sp
 .endif
 
 
-.macro  phaxy
-  pha
-  phx
-  phy
-.endmacro
-
-
-.macro  plyxa
-  ply
-  plx
-  pla
-.endmacro
-
-
-.include "zero-page.inc"
+.include "globals.S"
 
 K_ENTER = $0d
 K_BACKSPACE = $7f
@@ -77,18 +125,26 @@ reset_handler:
 init:
   ldx #$ff  ; Initialize the stack pointer
   txs
+;right_here:
+;  jsr getc
+;  bcc :+
+;  lda #$3e  ; '>'
+;  jsr putc
+;: jmp right_here
 
   jsr zps_init
 
-  lda #<dump_instructions      ; Default dump interpretation
-  ldx #>dump_instructions
+  ;lda #<dump_instructions      ; Default dump interpretation
+  ;ldx #>dump_instructions
+  lda #<dump_hex
+  ldx #>dump_hex
   jsr set_dump_func
 
   lda #$39  ; Default
   jsr write_ansi_color
   ldx #<@READY
   ldy #>@READY
-  .define init_msg .sprintf("%c%cNeil's 6502 SBC R1%c%c15K RAM SYSTEM%c%cREADY%c%c", $0d, $0a, $0d, $0a, $0d, $0a, $0d, $0a)
+  .define init_msg .sprintf("%c%cNeil's 6502 SBC R2%c%c64K RAM SYSTEM%c%cREADY%c%c", $0d, $0a, $0d, $0a, $0d, $0a, $0d, $0a)
   .rodata
   @READY: .byt .strlen(init_msg), init_msg
   .code
@@ -98,6 +154,11 @@ init:
   lda #$f0
   sta dump_ptr+1
   ; Fall through to main
+
+  ;lda #$28   ; '('
+  ;jsr spi_test
+  ;lda #$7a   ; 'z'
+  ;jsr spi_test
 
 main:
   ; 435b1b  RIGHT ARROW
@@ -172,7 +233,7 @@ main:
 @maybe_enter:
   cmp #K_ENTER
   bne @store
-  jsr con_next_line     ; Move the cursor to the next line
+  jsr write_eol     ; Move the cursor to the next line
   lda #$39  ; Default
   jsr write_ansi_color
   jsr request           ; Process the command
@@ -233,7 +294,7 @@ request:
   ldx #<cmdline_stream  ; X refers to the ptr in ZP
   jsr read_from_stream  ; Read the first character of the request
 
-  cmp #$69              ; 'i'
+  cmp #'i'              ; i[hai]  Change interpretation (hex, ascii, instructions)
   bne @maybe_dump
 
   jsr read_from_stream  ; Read the character following 'I'
@@ -241,12 +302,12 @@ request:
   lda #<@DUMP_FUNC_MAP
   ldx #>@DUMP_FUNC_MAP
   jsr map
-  bcc @bad_request
-  jsr set_dump_func
-  rts
+  bcs :+
+  jmp @bad_request
+: jmp set_dump_func
 
 @maybe_dump:
-  cmp #$64              ; 'd'
+  cmp #'d'
   bne @maybe_dump_registers
 
   ; If an address is present then it should be parsed to dump_ptr
@@ -263,24 +324,24 @@ request:
 : lda #8          ; Lines to dump
   jsr dump
 
-  ;jsr con_next_line
+  ;jsr write_eol
   ;jsr test
   rts
 
 @maybe_dump_registers:
-  cmp #$72             ; 'r'
+  cmp #'r'
   bne @maybe_write
 
   jmp dump_registers
 
 @maybe_write:
-  cmp #$77          ; 'w'
+  cmp #'w'
   bne @maybe_continue
 
 ;  jsr parse_hex8      ; Parse the HI byte of the address to write to
 ;  tay
 ;  jsr parse_hex8      ; Parse the LO byte
-;  jsr zps_phay        ; Put the pointer to the address to write to on the ZP stack
+;  jsr zps_phya        ; Put the pointer to the address to write to on the ZP stack
 ;  jsr parse_hex8      ; Parse the byte to be written
 ;
 ;  ldx zp_sp           ; Write the byte to the specified address
@@ -300,7 +361,7 @@ request:
   rts
 
 @maybe_continue:
-  cmp #$63          ; 'c'
+  cmp #'c'
   bne @maybe_test
 
   ; The stack holds the return address in main then Y,X,A,flags,PC(BRK)
@@ -311,36 +372,134 @@ request:
   rti
 
 @maybe_test:
-  cmp #$74          ; 't'
-  bne @bad_request
+  cmp #'t'
+  bne @maybe_spi
 
-  jsr dump_sp
-  brk
-  nop   ; "signature" ( BRK parameter)
+;  jsr dump_sp
+;  brk
+;  nop   ; "signature" ( BRK parameter)
+;
+;  lda #$62  ; 'b' for back from monitor
+;  jsr putc
+;  jsr dump_sp
+;
+;  jsr parse_hex8  ; Abuse dump_ptr to store parameters for test
+;  sta dump_ptr+1
+;  jsr parse_hex8
+;  sta dump_ptr
 
-  lda #$62  ; 'b' for back from monitor
-  jsr putc
-  jsr dump_sp
-
-  jsr parse_hex8  ; Abuse dump_ptr to store parameters for test
-  sta dump_ptr+1
+  .if .defined (TEST)
   jsr parse_hex8
-  sta dump_ptr
-  jsr parse_hex8
-
-  ;.if .defined(test)
   jsr test
-  ;.endif
+  .endif
+  rts
+
+@maybe_spi:
+  cmp #'s'
+  bne @maybe_flash
+  ; "ss" to select, "sr" to release, "s44" to transmit $44, "sp4" to pump 4 bytes
+  lda ($00,x)       ; Read the head of the stream
+  cmp #'s'
+  bne :+
+  jmp SPI_select  ; rts in SPI_select will return from this method
+: cmp #'r'
+  bne :+
+  jmp SPI_release
+: cmp #'p'
+  bne :+
+  jsr inc_zp_ptr           ; Skip the 'p'
+  jsr read_from_stream
+  jsr parse_hex4  ; Number of exchanges to pump
+  tax
+@pump:
+  lda #$ff
+  jsr SPI_exchange
+  jsr phex8
+  jsr print_space
+  dex
+  bne @pump
+  rts
+: jsr parse_hex8
+  jsr SPI_exchange
+  jmp phex8         ; Show the received data
+
+@prepare_flash_method:
+  ldy @flash_buf_ptr + 1
+  lda @flash_buf_ptr
+  jsr zps_phya
+  ldy @address_within_flash + 1
+  lda @address_within_flash
+  rts
+
+@maybe_flash:
+  cmp #'f'
+  bne @bad_request
+  jsr power_up_SPI_flash
+  ;txa
+  ;bit @x_msg
+  ;jsr show_A
+  jsr read_from_stream
+  ;bit @a_msg
+  ;jsr show_A
+  cmp #'i'          ; i: Identify
+  bne :+
+  ldya $04, $00
+  jsr zps_phya
+  jsr read_SPI_flash_unique_identifier
+  jmp zps_release2  ; Use `rts` in zps_release2
+: cmp #'a'          ; a: Address (within flash) for subsequent operations
+  bne :+
+  jsr parse_hex8                ; Read MSB first
+  sta @address_within_flash + 1
+  jsr parse_hex8
+  sta @address_within_flash
+  rts
+: cmp #'b'          ; b: Buffer in RAM for flash operations
+  bne :+
+  jsr parse_hex8          ; Read MSB first
+  sta @flash_buf_ptr + 1
+  jsr parse_hex8
+  sta @flash_buf_ptr
+  rts
+: cmp #'r'          ; b: Read 256 bytes from address to buffer
+  bne :+
+  jsr @prepare_flash_method
+  jsr read_SPI_flash_page
+  jmp zps_release2  ; Use `rts` in zps_release2
+: cmp #'e'          ; b: Erase 4K at address
+  bne :+
+  jsr @prepare_flash_method
+  jsr erase_4K_of_SPI_flash
+  jmp zps_release2  ; Use `rts` in zps_release2
+: cmp #'w'          ; w: Write 256 bytes from buffer to address
+  bne :+
+  jsr @prepare_flash_method
+  jsr write_SPI_flash_page
+  jmp zps_release2  ; Use `rts` in zps_release2
+: lda @flash_buf_ptr      ; Show state
+  pha
+  lda @flash_buf_ptr + 1
+  pha
+  lda @address_within_flash
+  pha
+  lda @address_within_flash + 1
+  pha
+  ldx #<@STATE_MSG
+  ldy #>@STATE_MSG
+  jsr printfu
   rts
 
 @bad_request:
   ldx #<@BAD_REQUEST
   ldy #>@BAD_REQUEST
-  jsr pstr
-
-  rts
+  jmp pstr
 
 .data
+@address_within_flash: .byt 0, 0
+@flash_buf_ptr: .byt 0, 0
+@STATE_MSG: .byt "addr:",I_HEX16,"xx buf:",I_HEX16,13,10,0
+@x_msg: .byt "X:",0
+@a_msg: .byt "A:",0
 @DUMP_FUNC_MAP:
   .byt 4, "h",      "a",        "i", 0
 @DUMP_FUNC_MAP_VALUES:
@@ -413,11 +572,11 @@ dump_registers:
   pha                 ; ..and HI after
   ldx #<@REGS
   ldy #>@REGS
-  jsr printfu
-  rts
+  jmp printfu
 
 @FLAGS: .byt "NV1BDIZC"
-@C = printfu_putc
+
+@C = %10010011 ; printfu_putc
 @REGS:
   .byt %10010000,%10010000," A:",%10010000," X:",%10010000," Y:",%10010000," S:",%10010000,"  ",@C,@C,@C,@C,@C,@C,@C,@C,$0d,$0a,0
 
@@ -465,7 +624,7 @@ dump:
   jsr print_space
 dump_func_ptr:
   jsr $ffff         ; Placeholder: Self-modifying
-  jsr con_next_line ; Move the console cursor to the next line
+  jsr write_eol     ; Move the console cursor to the next line
   dec lines_to_dump
   bne:-
   rts
@@ -476,7 +635,7 @@ dump_func_ptr:
 ;1000  00 00 00 00 00 00 00 00  abcdefgh
 ;
 dump_hex:
-  ldy #8            ; Number of bytes to dump
+  ldy #16           ; Number of bytes to dump
 : tya               ; Remember Y because phex8 destroys it
   pha
   ldx #dump_ptr
@@ -526,9 +685,9 @@ dump_instructions:
   ldx #<mnemonic_stream
   tay                               ; Y is now the mnemonic ID
   asl                               ; A is now 2x mnemonic_id
-  jsr add_to_ptr
+  jsr advance_zp_ptr
   tya                               ; A is now the mnemonic ID once more
-  jsr add_to_ptr                    ; mnemonic_stream now points to @MNEMONICS + 3 * mnemonic_id
+  jsr advance_zp_ptr                ; mnemonic_stream now points to @MNEMONICS + 3 * mnemonic_id
   ldy #3                            ; Copy 3 characters from mnemonic_stream to the console
 : jsr read_from_stream
   jsr putc
@@ -573,8 +732,7 @@ dump_instructions:
   adc dump_ptr+@lo
   bcc :+
   inx
-: jsr phex16
-  rts
+: jmp phex16
 
 @all_other_modes:
   tay                               ; Y is now the addressing mode ID
@@ -756,338 +914,19 @@ dump_sp:
 .endif
 
 
-test:
-.if .defined(test)
-
-  ; For brute-force testing from Ruby.
-  ; A: 8-bit signed
-  ; dump_ptr: 16-bit unsigned
-
-  ; add-s8-to-u16.S:
-  ; subroutine + test
-
-  ; Works but larger and slower ( probably)
-  ; When Carry, inc or dec depending on sign (N) of s8 (A)
-;  pha
-;  clc
-;  adc dump_ptr
-;  sta dump_ptr
-;  pla             ; Sets N but not C
-;  bmi :+
-;  bcc @out
-;  inc dump_ptr+1
-;  bra @out
-;: bvs @out
-;  dec dump_ptr+1
-;  bra @out
-
-  jsr add_s8_to_u16
-
-@out:
-  lda dump_ptr+1
-  jsr phex8
-  lda dump_ptr
-  jsr phex8
-  jsr con_next_line
-  rts
-
-  ; add_to_ptr
-
-  lda #$01
-  sta $02
-  lda #$00
-  sta $03
-  ldx #$02
-  lda #$80
-  jsr add_to_ptr
-  lda $02
-  ldx #$81
-  jsr check_equal
-  lda $03
+delay:
+  phx
+  phy
+  ldy #$10
+@inner:
   ldx #$00
-  jsr check_equal
-
-
-;  ldx #<@VALUES
-;  ldy #>@VALUES
-;  lda #0            ; 0:$1234
-;  jsr load_from_xy
-;  tay               ; Preserve Actual LO because A is about to be bashed
-;  txa               ; A is now actual HI
-;  ldx #$12          ; X is expected HI
-;  jsr check_equal
-;
-;  tya               ; A is now actual LO once again
-;  ldx #$34          ; X is expected LO
-;  jsr check_equal
-;
-;  ldx #<@VALUES
-;  ldy #>@VALUES
-;  lda #1            ; 1:$6789
-;  jsr load_from_xy
-;  tay               ; Preserve Actual LO because A is about to be bashed
-;  txa               ; A is now actual HI
-;  ldx #$67          ; X is expected HI
-;  jsr check_equal
-;
-;  tya               ; A is now actual LO once again
-;  ldx #$89          ; X is expected LO
-;  jsr check_equal
-
-
-  ; map
-
-  lda #<@MAP
-  ldx #>@MAP
-  ldy #9            ; Maps to $6789
-  jsr map           ; A is now actual LO and X is actual HI
-  stx @actual_hi+1  ; X will be destroyed so keep it somewhere
-  ;     NV1BDIZC
-  ldx #%00000001    ; C should be 1
-  jsr check_carry
-
-  ldx #$89          ; X is now expected LO
-  jsr check_equal
-
-  @actual_hi:
-  lda #$ff          ; A is now actual HI
-  ldx #$67
-  jsr check_equal
-
-
-  ; old map
-
-;  lda #>@VALUES
-;  pha
-;  lda #<@VALUES
-;  pha
-;  ldx #<@KEYS
-;  ldy #>@KEYS
-;  lda #9          ; Maps to $6789
-;  jsr map
-;  stx @saved_x+1
-;  tay             ; Save A in Y
-;  ;     NV1BDIZC
-;  ldx #%00000001  ; C should be 1
-;  jsr check_carry
-;
-;  ; X should be $67
-;  txa             ; A is now what X was after "map"
-;  ldx #$67
-;  @saved_x:
-;  lda #$ff
-;  jsr check_equal
-;
-;  tya             ; Restore A from Y.  It's now what A was after "map"
-;  ldx #$89
-;  jsr check_equal
-;  jsr dump_sp
-
-
-  ; Test parse_hex8
-
-;  lda #<@FIVE_A
-;  sta tmp_ptr0
-;  lda #>@FIVE_A
-;  sta tmp_ptr0+1
-;
-;  ldx #<tmp_ptr0
-;  jsr parse_hex8
-;
-;  ldx #$5a
-;  jsr check_equal
-
-  ;lda #$5a
-  ;ldx #$1e
-  ;jsr check_equal  ; to test check_equal with its new use of printfu
-
-;  ;     NV1BDIZC
-;  ldx #%00000010
-;  lda #$ff
-;  sta tmp0
-;  inc tmp0        ; See which flags INC affects when it overflows.  Z is set but C is not
-;  jsr @check_flags
-
-;  ;     NV1BDIZC
-;  ldx #%00000011
-;  lda #$ff
-;  clc
-;  adc #1          ; Adding #1 to #$ff sets both Z AND C flags
-;  jsr @check_flags
-;
-;  lda #5
-;  ldx #<@LOOKUP
-;  ldy #>@LOOKUP
-;  jsr index
-;  ;     NV1BDIZC
-;  ldx #%00000001  ; C should be 1
-;  jsr check_carry
-;  bcs :+
-;  ldx #2
-;  jsr check_equal
-;:
-;
-;  lda #2
-;  ldx #<@LOOKUP
-;  ldy #>@LOOKUP
-;  jsr index
-;  ;     NV1BDIZC
-;  ldx #%00000000  ; C should be 0
-;  jsr check_carry
-;
-;  lda #>@VALUES
-;  pha
-;  lda #<@VALUES
-;  pha
-;  ldx #<@KEYS
-;  ldy #>@KEYS
-;  lda #2          ; This key is not in the map
-;  jsr map
-;  ;     NV1BDIZC
-;  ldx #%00000000  ; C should be 0
-;  jsr check_carry
-
-  ; Test parse_nybble
-;  lda #$30          ; ASCII '0'
-;  jsr parse_nybble
-;  ldx #$0           ; Should be parsed as 0
-;  jsr check_equal
-;
-;  lda #$39          ; ASCII '9'
-;  jsr parse_nybble
-;  ldx #$9           ; Should be parsed as 9
-;  jsr check_equal
-;
-;  lda #$61          ; ASCII 'a'
-;  jsr parse_nybble
-;  ldx #$a           ; Should be parsed as 0xa
-;  jsr check_equal
-;
-;  lda #$66          ; ASCII 'f'
-;  jsr parse_nybble
-;  ldx #$f           ; Should be parsed as 0xf
-;  jsr check_equal
-
-  ; Test read_from_stream
-;  lda #<(@T+1)
-;  sta tmp_ptr0
-;  lda #>(@T+1)
-;  sta tmp_ptr0+1
-;
-;  ldx #<tmp_ptr0
-;  jsr read_from_stream
-;  ldx #$61 ; 'a'
-;  jsr check_equal
-;
-;  ldx #<tmp_ptr0
-;  jsr read_from_stream
-;  ldx #$3a ; ':'
-;  jsr check_equal
-
-  ; Test printfu
-;  ldx #<@T
-;  ldy #>@T
-;  jsr pstr
-;  tsx
-;  txa
-;  jsr phex8
-;  jsr con_next_line
-;
-;  lda #>@B   ; Y first
-;  pha
-;  lda #<@B
-;  pha
-;  lda #$5a
-;  pha
-;  ldx #<@A
-;  ldy #>@A
-;  jsr printfu
-;
-;  ldx #<@T
-;  ldy #>@T
-;  jsr pstr
-;  tsx
-;  txa
-;  jsr phex8
-;  jsr con_next_line
-
+: dex
+  bne :-
+  dey
+  bne @inner
+  ply
+  plx
   rts
-
-@check_flags:
-  php
-  pla
-  and #$c3        ; Mask out the 1BDI flags
-  jsr check_equal
-  rts
-
-.data
-@MAP:
-  .byt 3
-@KEYS:
-  .byt      4,     9, 0
-@VALUES:
-  .word $1234, $6789
-@LOOKUP:
-  .byt 1,3,5,7,9,0
-@FIVE_A:
-  .byt "5a"
-@T:
-  .byt 2,"a:"
-@A:
-  .byt "hello. b:",%10010000,",s:",%11100001,0
-@B:
-  .byt 5,"exstr"
-.code
-.endif
-
-
-; Prints an error message if C is not the same as X
-;
-; @param  C   The actual value
-; @param  X   The expected value
-; @destroys  None
-;
-check_carry:
-  pha             ; Save A
-  php             ; Isolate C
-  pla
-  ;     NV1BDIZC
-  and #%00000001
-  jsr check_equal
-  pla             ; Restore A
-  rts
-
-
-; Prints an error message if A is not the same as X
-;
-; @param  A   The actual value
-; @param  X   The expected value
-; @destroys  None
-;
-check_equal:
-
-  stx @compare+1  ; Modify the CMP instruction below so that it compares A to the current value of X
-@compare:
-  cmp #$ff
-  beq :+          ; If A == X then that's good and we're done
-
-  phaxy           ; Save all registers to avoid the need at invocation and because speed doesn't matter here
-
-  pha             ; Push A first.  It's what we got
-  txa             ; Push X.  It's what we expected
-  pha
-  ldx #<@ISSUE
-  ldy #>@ISSUE
-  jsr printfu
-
-  plyxa
-
-: rts
-
-.data
-@ISSUE:
-  .byt "Expected:",%10010000,",got:",%10010000,$0d,$0a,0
-.code
 
 
 ; For invoking in the middle of a method to provide a trace of values through execution.
@@ -1161,311 +1000,6 @@ dump_t:
 ;
 ; Library - not specific to the monitor
 
-
-; Adds a signed 8-bit value to an unsigned 16-bit value.
-;
-; @param  A   The signed 8-bit value
-; @param  X   The address in ZP of the unsigned 16-bit value
-; @preserves  X Y
-;
-add_s8_to_u16:
-
-  @hi = $01   ; Offset from address X in ZP
-  @lo = $00
-
-  bpl :+      ; If A is -ve then pre-decrement HI
-  dec @hi,x
-: clc
-  adc @lo,x
-  sta @lo,x
-  bcc :+
-  inc @hi,x
-: rts
-
-
-; A cut-down printf.  Would be interesting to compare the code savings between
-; this ( assuming no extra coolness like padding is required of printf) to
-; printf to multiple seperate printing calls ( pstr, phex8, pstr, etc.) in the
-; caller.
-;
-; Only support ASCII ( codes <= 127) is supported so that the MSB:1 can be used
-; for placeholders.
-;
-;       ; Params for formatters pushed Y, then X then A, rightmost placeholder
-;       ; first so that printfu can work up the stack.  It does kung-fu to
-;       ; remember the return address of the caller.
-;       lda #>@mystr  ; Y: HI
-;       pha
-;       lda #<@mystr  ; X: LO
-;       pha
-;       lda #$5a      ; A: byte to turn in to hex
-;       pha
-;       ldx <@format
-;       ldy <@format
-;       jsr printfu
-;     @format:
-;       .byt "f1:", %10010000, ",f2:", %11100001
-;                    ^^^^   ^            |||   \Formatter#1
-;                    |YXA   \Formatter#0 \Takes Y and X as params
-;                    \Placeholder flag
-;
-; @param  X   LO byte of address of format string
-; @param  Y   HI byte of address of format string
-; @destroys   A X Y
-; @returns  Only if the pushing of parameters on to the stack matches with the
-;           formatter parameters in the format string
-;
-printfu:
-  ; FIXME: There's currently a problem using formatter#1 (pstr), or maybe it's
-  ; just with pulling X and/or Y or more than one parameter from the stack
-
-  ; Remember the return address because this code is going to pull the
-  ; parameters off the stack ( so the caller doesn't need to)
-  pla
-  sta @ret_addr_lo+1
-  pla
-  sta @ret_addr_hi+1
-
-  stx @strbase+1
-  sty @strbase+2
-  ldy #$00        ; Y is the offset from the beginning of the string data
-
-@loop:
-@strbase:
-  lda $ffff,y     ; Load a character
-  beq @finished   ; If the terminator is found
-  bpl @ascii      ; If MSB is 0 then this is a normal ASCII character, not a placeholder
-
-  sty printfu_y_safe    ; Remember Y because the formatter might require it as a parameter or destroy it
-  asl                   ; *2 turns the formatter index in to a byte offset in to the table.  ( & 0xf) << 1 would be more natural
-  sta printfu_flags     ; Use a ZP location for ASL because A is destroyed by all the PLAs below
-  and #$1e              ; This would normally be "and #$0f" but it's been pre-ASL'd above
-  tax                   ; X is now the byte offset into @formatters of the ptr to the formatter routine
-  lda @formatters,x     ; Copy the pointer to the formatter routine to the self-modified JSR below
-  sta @formatter_ptr+1
-  lda @formatters+1,x
-  sta @formatter_ptr+2
-  ;lda printfu_flags
-  ;jsr phex8
-  ;jsr dump
-  asl printfu_flags ; Shift left so that the bit that indicates if the formatter takes Y as a parameter is shifted out in to the C flag
-  bcc :+            ; If the formatter doesn't take Y as a param then it won't have been pushed to the stack, so don't pull it off
-  pla
-  tay               ; The Y parameter is now set.  Don't destroy it while preparing the rest
-: asl printfu_flags ; The bit controlling the X parameter is now in C
-  bcc :+            ; If the formatter doesn't take X as a param then it won't have been pushed to the stack, so don't pull it off
-  pla
-  tax
-: asl printfu_flags ; The bit controlling the A parameter is now in C
-  bcc :+            ; If the formatter doesn't take A as a param then it won't have been pushed to the stack, so don't pull it off
-  pla
-:
-@formatter_ptr:
-  jsr $ffff
-  ldy printfu_y_safe    ; Restore Y
-  iny
-  bne @loop
-
-@ascii:
-  jsr putc        ; Print the character
-  iny             ; Advance to the next character
-  bne @loop       ; Loop unless there are no more characters ( zero used here to prevent infinite loop as Y overflows)
-
-@finished:
-@ret_addr_hi:     ; Restore the return address on the stack
-  lda #$ff
-  pha
-@ret_addr_lo:
-  lda #$ff
-  pha
-  rts
-
-; A list of pointers to functions that format values for placeholders
-@formatters:
-  .word phex8, pstr, phex4, putc, phex16
-
-printfu_putc = %10010011
-
-
-; @param  X   Index in ZP of ptr to two hex digits represented in ASCII.
-; @return   A   The value of the hex byte
-; @destroys   A
-;
-parse_hex8:
-;  sta @ptr+1
-;  stx @ptr+2
-;@ptr:
-;  lda $ffff   ; Load the character that contains the representation of the nybble.  $ffff is a placeholder for self-modifying code
-  jsr read_from_stream  ; Read the HI nybble
-
-  jsr parse_nybble
-  asl
-  asl
-  asl
-  asl
-  sta @or+1
-  jsr read_from_stream  ; Read the LO nybble
-
-  jsr parse_nybble
-@or:
-  ora #$ff              ; Combine the HI and LO
-  rts
-
-
-; Provides the numeric value of a nybble represented in ASCII.
-;
-; @param    A   An ASCII character representing a hex nybble '0'..'9' or
-;               'a'..'f'.  No error checking is performed and the results are
-;               undefined for input outside this range
-; @return   A   The value of the nybble
-; @destroys   A
-;
-parse_nybble:
-  ; A should be $30..$39 or $61..$66.  No error checking to minimize code size
-  cmp #$3a
-  sec
-  bpl :+      ; (A - $3a) will be +ve when A >= $3a, i.e. 'a'..'f'
-  sbc #$30    ; $30 is '0' in ASCII
-  rts
-: sbc #$61-10    ; $61 is 'a' in ASCII
-  rts
-
-
-; Prints a 16-bit value in hex.
-;
-; @param      A   The LO byte of the value to print
-; @param      X   The HI byte of the value to print
-; @destroys   A X Y C
-; TODO: Consider writing "@preserves" rather than "@destroys"
-;
-phex16:
-  pha
-  txa
-  jsr phex8
-  pla
-  jsr phex8
-  rts
-
-
-; Prints a byte in hex
-;
-; @param      A   The byte to print
-; @destroys   A Y C
-;
-phex8:
-  tay ; Save the LO nybble while A is trashed
-  lsr
-  lsr
-  lsr
-  lsr
-  jsr phex4
-  tya ; Get the LO nybble back
-  jsr phex4
-  rts
-
-
-; Prints a hex nybble
-;
-; @param      A   The value to print
-; @destroys   A C
-;
-phex4:
-  and #$0f
-  cmp #$0a
-  clc
-  bpl @gt10
-  adc #$30      ; $30 is ASCII '0'
-  bpl @print
-@gt10:
-  adc #-10+$61  ; $61 is ASCII 'a'
-@print:
-  jsr putc
-  rts
-
-
-; Pascal-style strings, or C strings?
-; Try out Pascal because I can't remember the drawbacks.  Fast strlen is a benefit.  Not supporting strings longer than 255 characters
-;
-;  X: LO byte of ptr to string
-;  Y: HI byte of ptr to string
-;
-; Destroys: A, X, Y
-;
-pstr:
-  stx tmp_ptr0      ; Use some scratch space in ZP for the pointer to the string data
-  sty tmp_ptr0+1
-  ldy #$00          ; Y is the offset from the beginning of the string data
-  lda (tmp_ptr0),y
-  beq @done         ; If the length is 0 then return
-  iny               ; Advance to the first character in the string
-  tax               ; X is now the number of characters remaining to print
-: lda (tmp_ptr0),y  ; Load a character
-  iny               ; Advance to the next character
-  jsr putc          ; Print the character
-  dex               ; One less characters to print
-  bne :-            ; Loop unless there are no more characters
-@done:
-  rts
-
-
-; Prints a space character.  Saves two bytes loading A with the space character
-; code in all the places that a space is required.
-;
-; @destroys   A
-;
-print_space:
-  lda #$20    ; ASCII space character
-  jsr putc
-  rts
-
-
-; Prints a line terminator ( End Of Line).
-;
-; @destroys   A
-;
-con_next_line:
-  lda #$0d
-  jsr putc
-  lda #$0a
-  jsr putc
-  rts
-
-
-; Writes an ANSI escape sequence for changing the foreground color.
-;
-; @params  A  Code for the color:
-;               - $30 Black
-;               - $31 Red
-;               - $32 Green
-;               - $33 Yellow
-;               - $34 Blue
-;               - $35 Magenta
-;               - $36 Cyan
-;               - $37 Light gray
-;               - $39 Default foreground color
-; @params  C  Set for "bold" ( high intensity)  seems to actually set bold rather than hi-int, which I don't want
-;
-write_ansi_color:
-
-  pha
-  lda #$1b  ; ESC
-  jsr putc
-  lda #$5b  ; '['
-  jsr putc
-  lda #$33  ; '3'
-  jsr putc
-  pla
-  jsr putc
-  ;bcc :+
-  ;lda #$3b  ; ';'
-  ;jsr putc
-  ;lda #$30  ; '1'
-  ;jsr putc
-;:
-  lda #$6d  ; 'm'
-  jsr putc
-  rts
-
 ; Idea: "stack frame" in ZP.  Terrified of using ZP because can never do proper
 ; job of deciding what is important enough to store there.  Recursion stores
 ; return address on the stack.  Saving registers also uses stack.  Could use
@@ -1514,7 +1048,7 @@ map:
   pha                   ; A is currently the index of the entry found
   @entries:
   lda #$ff              ; $ff has been replaced with the number of entries in the map + 1
-  jsr add_to_ptr
+  jsr advance_zp_ptr
 
   pla                   ; A is now the index of the entry found
   asl
@@ -1558,45 +1092,6 @@ index:
 @absent:
   clc             ; The C flag should be cleared to indicate that the character was absent
   rts
-
-
-; A Stream just a 16-bit pointer in ZP to a stream of bytes ; ( typically a
-; string).  This method reads a byte from the memory location referenced by the
-; pointer and then advances the pointer.
-;
-; @param    X   The address in ZP of the Stream
-; @return   A   The next byte from the stream
-; @destroys  A
-;
-read_from_stream:
-  lda ($00,x)
-  jsr inc_ptr
-  rts
-
-
-; @param  X  The address in ZP of the pointer
-; @param  A  The amount by which to advance the pointer
-; @destroys   A
-;
-add_to_ptr:
-  clc
-  adc $00,x
-  sta $00,x
-  bcc :+
-  inc $01,x
-: rts
-
-
-; Advances a pointer to the next byte.
-;
-; @param  X   The address in ZP of the pointer
-; @destroys  Nothing
-;
-inc_ptr:
-  inc $00,x
-  bne :+
-  inc $01,x
-: rts
 
 
 irq_handler:
