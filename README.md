@@ -7,8 +7,10 @@ The first step was a [Free run](free-run) experiment.
 
 The next step was [R1](R1), a SBC based around a [real 6502] but with RAM, ROM and other bus devices simulated by AVRs.
 
+Currently, I am working on R2, where a real 6502 and SRAM are supported by an FPGA for address decoding, reset and clock scaling along with bus devices for a UART and an SPI master.
 
-## Step by step
+
+## Step by step instructions for demonstrating R1
 
 - Connect SERIAL1 to the host used to interact with the SBC
 - SBC should supply power to RS232 board
