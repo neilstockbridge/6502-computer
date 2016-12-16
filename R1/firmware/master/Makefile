@@ -9,8 +9,7 @@ SYS_CLOCK = 7372800
 
 PARTS = main.o
 
-OPTIMIZE = -Os
-
+OPTIMIZE ?= -O2
 DEVICE = $(TARGET)
 
 # details common across projects
@@ -42,7 +41,7 @@ COMPILE=$(CC) $(CFLAGS) $(INCLUDES)
 
 # Targets...
 
-all: $(PARTS)
+all: $(PROJECT).elf
 
 $(PROJECT).elf: $(PARTS)
 	$(CC) $(CFLAGS) -o $(PROJECT).elf -Wl,-Map,$(PROJECT).map $(PARTS)
@@ -54,9 +53,6 @@ $(PROJECT).hex: $(PROJECT).elf
 $(PROJECT).bin: $(PROJECT).elf
 	$(OBJCOPY) -O binary $(PROJECT).elf $(PROJECT).bin
 
-dis: $(PROJECT).elf
-	avr-objdump --source $(PROJECT).elf
-
 identify: $(PROJECT).hex
 	avrdude $(AVRDUDE_OPTS) identify
 
@@ -67,6 +63,9 @@ fuses:
 	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0xd7:m  # ATmega1284 7:CKDIV8=no,6:CKOUT=no, 4-5:SUT,0-3:CKSEL. CKSEL3..1 3:Full-swing XTAL, CKSEL0=1,SUT=1: 20M XTAL+BOD
 	avrdude $(AVRDUDE_OPTS) -U hfuse:w:0xd1:m  # ATmega1284 Default but disabled JTAG to regain use of PC3..5 and disable EEPROM wipe on flash
 	avrdude $(AVRDUDE_OPTS) -U efuse:w:0xfc:m  # ATmega1284 BODLEVEL ~4.3V
+
+dis: $(PROJECT).elf
+	avr-objdump --source $(PROJECT).elf
 
 upload: $(PROJECT).hex
 	avrdude $(AVRDUDE_OPTS) -U flash:w:$(PROJECT).hex

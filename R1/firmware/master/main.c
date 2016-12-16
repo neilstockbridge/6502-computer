@@ -161,6 +161,8 @@ uint8_t   address_lo = 0x00;
 
 uint8_t volatile  selected_slave_id = NO_SLAVE_SELECTED;
 
+bool  debug_spi = false;
+
 
 // --------------------------------------------------------------- simulated RAM
 
@@ -343,14 +345,26 @@ void static  send_eol()
 }
 
 
+void static  send_hex4 (uint8_t value)
+{
+  // This uses 18!? bytes less RAM *and* 22 bytes less program memory
+  char static const hex_digit_for[] PROGMEM = "0123456789abcdef";
+  send_char (pgm_read_byte (&hex_digit_for [value]));
+}
+
+
 // Sends the hexadecimal representation of the given byte over the serial link.
 //
-void static  send_byte_as_hex( uint8_t value)
+void static  send_hex8 (uint8_t value)
 {
-  char const static  hex_digit_for[] PROGMEM = "0123456789abcdef";
+  send_hex4 (value >> 4);
+  send_hex4 (value & 0xf);
+}
 
-  send_byte( pgm_read_byte( &hex_digit_for[ value >> 4]));
-  send_byte( pgm_read_byte( &hex_digit_for[ value & 0x0f]));
+
+void static  send_bool (bool value)
+{
+  send_byte (value ? 't' : 'f');
 }
 
 
@@ -365,7 +379,7 @@ void static  db( char *msg, uint8_t value )
 {
   send_msg_P( msg);
   send_char(' ');
-  send_byte_as_hex( value );
+  send_hex8( value );
   send_eol();
 }
 */
@@ -413,7 +427,7 @@ uint8_t  spi_exchange( uint8_t  data_to_send )
 {
   #ifdef _SPI_DEBUG
   send_str("SPIX ");
-  send_byte_as_hex( data_to_send );
+  send_hex8( data_to_send );
   send_eol();
   #endif
 
@@ -441,7 +455,7 @@ uint8_t  SPI_read()
 
   #ifdef _SPI_DEBUG
   send_str("SPI.read ");
-  send_byte_as_hex( address_lo );
+  send_hex8( address_lo );
   send_byte('>');
   #endif
 
@@ -480,7 +494,7 @@ uint8_t  SPI_read()
   }
 
   #ifdef _SPI_DEBUG
-  send_byte_as_hex( data);
+  send_hex8( data);
   send_eol();
   #endif
 
@@ -492,11 +506,11 @@ void  SPI_write( uint8_t data )
 {
   #ifdef _SPI_DEBUG
   send_str("SPI.write ");
-  send_byte_as_hex( address_lo );
+  send_hex8( address_lo );
   send_byte(',');
-  send_byte_as_hex( data );
+  send_hex8( data );
   send_str(", SPCR:");
-  send_byte_as_hex( SPCR );
+  send_hex8( SPCR );
   send_eol();
   #endif
 
@@ -549,6 +563,11 @@ void  SPI_write( uint8_t data )
     case 0x03: // Slave select
       {
       uint8_t  slave_id = data & 0x7;
+      if (debug_spi)
+      {
+        send_char ('S');
+        send_hex8 ((selected_slave_id << 4) | slave_id);
+      }
       // Currently the 6502 does not communicate directly with the Slave AVR,
       // so Slave#7 can be used to indicate that no slave should be selected
       //spi_exchange( (slave_id < 7) ? (SELECT_SLAVE_0 + slave_id) : RELEASE_SLAVE );
@@ -703,14 +722,14 @@ uint8_t  read_from_EEPROM()
   uint8_t  data = 0xea; // NOP
   #ifdef _EEPROM_DEBUG
   send_str("EEPROM.read ");
-  send_byte_as_hex( address_lo );
+  send_hex8( address_lo );
   send_byte('>');
   #endif
 
   // FIXME: Implement
 
   #ifdef _EEPROM_DEBUG
-  send_byte_as_hex( data);
+  send_hex8( data);
   send_eol();
   #endif
 
@@ -722,10 +741,10 @@ void  write_to_EEPROM( uint8_t data )
 {
   #ifdef _EEPROM_DEBUG
   send_str("EEPROM.write ");
-  send_byte_as_hex( address_hi );
-  send_byte_as_hex( address_lo );
+  send_hex8( address_hi );
+  send_hex8( address_lo );
   send_byte(',');
-  send_byte_as_hex( data );
+  send_hex8( data );
   send_eol();
   #endif
 
@@ -780,9 +799,9 @@ void static  report()
 {
   send_str("PHI2: "); send_level( clock);
   //send_str(", RESB: "); send_level( level_at_RESB()); // FIXME: Show what we expect RESB *should* be based on the last requested level
-  send_str(", ADDR: "); send_byte_as_hex( address_hi); send_byte_as_hex( address_lo);
+  send_str(", ADDR: "); send_hex8( address_hi); send_hex8( address_lo);
   send_str(", RWB: "); send_level( operation_requested);
-  send_str(", DATA: "); send_byte_as_hex( operation_requested == READ ? data_to_drive : latched_data );
+  send_str(", DATA: "); send_hex8( operation_requested == READ ? data_to_drive : latched_data );
   send_eol();
 }
 
@@ -1090,6 +1109,11 @@ void static  main_sink( uint8_t request_type )
       slow_mode = true;
       should_run = false;
       half_cycle();
+      break;
+
+    case 't': // trace
+      debug_spi ^= true;
+      send_str ("debug_spi:");  send_bool (debug_spi);
       break;
 
     case 'f': // fast

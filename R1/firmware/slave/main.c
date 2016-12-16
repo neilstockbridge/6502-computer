@@ -99,63 +99,69 @@ To reproduce:
 Queue  from_SPI; // Received via SPI and waiting for UART
 Queue  from_UART; // Received via UART and waiting for SPI
 
-//#define  debugging_SPI
+#define  DEBUG_SPI
 
 
 #define  NUL  '\0'
 
 
-void  byte_received_via_UART( uint8_t  data )
+void  byte_received_via_UART (uint8_t data)
 {
-  enqueue( &from_UART, data );
+  enqueue (&from_UART, data);
 }
 
 
 // Sends the given message from program memory over the serial link.
 //
-#define  send_str( s )  _send_str(PSTR(s))
+#define  send_str( s)  _send_str (PSTR (s))
 
-void static  _send_str( char const *s )
+void static  _send_str (char const *s)
 {
-  while ( true)
+  while (true)
   {
-    char  c = pgm_read_byte( s );
-    send_byte_via_UART( c);
-    if ( NUL == c)
+    char  c = pgm_read_byte (s);
+    send_byte_via_UART (c);
+    if (NUL == c)
       break;
     s += 1;
   }
 }
 
-/*
+
+void static  send_hex4 (uint8_t value)
+{
+  // This uses 18!? bytes less RAM *and* 22 bytes less program memory
+  char static const hex_digit_for[] PROGMEM = "0123456789abcdef";
+  send_byte_via_UART (pgm_read_byte (&hex_digit_for [value]));
+}
+
+
 // Sends the hexadecimal representation of the given byte over the serial link.
 //
-void static  send_byte_as_hex( uint8_t value)
+void static  send_hex8 (uint8_t value)
 {
-  char  static  hex_digit_for[] = "0123456789abcdef";
-
-  send_byte_via_UART( hex_digit_for[ value >> 4]);
-  send_byte_via_UART( hex_digit_for[ value & 0x0f]);
+  send_hex4 (value >> 4);
+  send_hex4 (value & 0xf);
 }
 
 
-void static  send_eol()
+void static  send_eol ()
 {
-  send_byte_via_UART('\r');
-  send_byte_via_UART('\n');
+  send_byte_via_UART ('\r');
+  send_byte_via_UART ('\n');
 }
 
 
-#define  report( aspect, value )  _report( PSTR( aspect), value )
+#define  report( aspect, value)  _report (PSTR (aspect), value)
 
-void static  _report( char const *aspect, uint8_t  value )
+void static _report (char const *aspect, uint8_t value)
 {
-  _send_str( aspect );
-  send_byte_as_hex( value );
-  send_eol();
+  _send_str (aspect);
+  send_hex8 (value);
+  send_eol ();
 }
 
-
+/*
 #define  report_bool( aspect, value )  _report_bool( PSTR( aspect), value )
 
 void static _report_bool( char const *aspect, bool  value )
@@ -189,9 +195,9 @@ void static  send_status_report()
 uint8_t volatile  selected_slave_id = NO_SLAVE_SELECTED;
 
 
-void  byte_received_via_SPI( uint8_t  data )
+void  byte_received_via_SPI (uint8_t data)
 {
-  enqueue( &from_SPI, data );
+  enqueue (&from_SPI, data);
 }
 
 
@@ -206,21 +212,25 @@ void  byte_received_via_SPI( uint8_t  data )
 // would have to buffer bytes outgoing via the UART and pretend that no bytes
 // have been received via the UART until the 6502 SPI TX is complete.
 //
-void  SPI_slave_select_asserted()
+void  SPI_slave_select_asserted ()
 {
   // SS0..3 are on PB0..3
   // SS4..6 are on PD4..6
-  if ( NO_SLAVE_SELECTED == selected_slave_id )
+  if (NO_SLAVE_SELECTED == selected_slave_id)
   {
     // Nothing to do.  Great!
   }
-  else if ( selected_slave_id <= 3 )
+  else if (selected_slave_id <= 3)
   {
-    drive_high( PORTB, selected_slave_id);
+    drive_high (PORTB, selected_slave_id);
+    // NOTE: selected_slave_id is not re-set to NO_SLAVE_SELECTED.  Is that a problem?
   }
   else {
-    drive_high( PORTD, selected_slave_id);
+    drive_high (PORTD, selected_slave_id);
   }
+  // Now that any externally selected slave has been released, MISO should be
+  // driven so it doesn't flap
+  drive_MISO ();
 }
 
 
@@ -228,15 +238,20 @@ void  SPI_slave_select_asserted()
 // selected device would have been released as soon as this device was
 // selected to deliver the request to select a slave.
 //
-void static  select_slave( uint8_t  slave_id )
+void static  select_slave (uint8_t slave_id)
 {
-  if ( slave_id <= 3 )
+  send_byte_via_UART ('S');
+  //send_hex4 (selected_slave_id);
+  //send_hex4 (slave_id);
+  send_hex8 ((PORTD & 0x70) | (PORTB & 0xf));
+  if (slave_id <= 3)
   {
-    drive_low( PORTB, slave_id);
+    drive_low (PORTB, slave_id);
   }
   else {
-    drive_low( PORTD, slave_id);
+    drive_low (PORTD, slave_id);
   }
+  send_hex8 ((PORTD & 0x70) | (PORTB & 0xf));
   // Remember which slave is selected so that it may be released later on
   selected_slave_id = slave_id;
 }
@@ -246,74 +261,74 @@ void static  select_slave( uint8_t  slave_id )
 // queue while we're halfway through a dequeue.  Because interrupts are
 // disabled, dequeue as quickly as possible.
 //
-bool static inline  dequeued_safely( Queue *q, uint8_t *data )
+bool static inline  dequeued_safely (Queue *q, uint8_t *data)
 {
   bool  data_is_valid;
 
-  cli();
+  cli ();
 
-  if ( 0 < queue_length( q) )
+  if (0 < queue_length (q))
   {
-    *data = dequeue( q);
+    *data = dequeue (q);
     data_is_valid = true;
   }
   else {
     data_is_valid = false;
   }
 
-  sei();
+  sei ();
 
   return data_is_valid;
 }
 
 
-void static  init()
+void static  setup ()
 {
-  init_UART();
-  init_SPI();
-  init_queue( &from_SPI );
-  init_queue( &from_UART );
+  init_UART ();
+  init_SPI ();
+  init_queue (&from_SPI);
+  init_queue (&from_UART);
 
   // Refer to "pinout.h"
   // The configuration of the UART automatically configures PD0 for sense and
   // PD1 for drive
-  DDRD = DRIVE( RESB )
-       | SENSE( IRQB )  // IRQB is Open Collector, so configured as SENSED ( High-Z) the external pull-up for IRQB will assert logic 1
-       | DRIVE( SS4 )
-       | DRIVE( SS5 )
-       | DRIVE( SS6 )
+  DDRD = DRIVE (RESB)
+       | SENSE (IRQB)  // IRQB is Open Collector, so configured as SENSED ( High-Z) the external pull-up for IRQB will assert logic 1
+       | DRIVE (SS4)
+       | DRIVE (SS5)
+       | DRIVE (SS6)
        ;
-  DDRB = SENSE( SCK )
-       | SENSE( MISO ) // Until this device is selected
-       | SENSE( MOSI )
-       | SENSE( SSA )
-       | DRIVE( SS3 )
-       | DRIVE( SS2 )
-       | DRIVE( SS1 )
-       | DRIVE( SS0 )
+  DDRB = SENSE (SCK)
+       | SENSE (MISO) // Until this device is selected
+       | SENSE (MOSI)
+       | SENSE (SSA)
+       | DRIVE (SS3)
+       | DRIVE (SS2)
+       | DRIVE (SS1)
+       | DRIVE (SS0)
        ;
   // All Slave Select signals should begin HIGH ( *not* asserted)
-  PORTD = ( LOW << RESB ) // Begin in Reset
-        | ( LOW << IRQB )   // LOW: IRQB asserted ( when configured as DRIVEN)
-        | ( HIGH << SS4 )
-        | ( HIGH << SS5 )
-        | ( HIGH << SS6 )
+  PORTD = (LOW << RESB) // Begin in Reset
+        | (LOW << IRQB)   // LOW: IRQB asserted ( when configured as DRIVEN)
+        | (HIGH << SS4)
+        | (HIGH << SS5)
+        | (HIGH << SS6)
         ;
   // Enable pull-ups on SCK, MOSI and /SS to prevent flapping when no SPI
   // master is connected
-  PORTB = PULL_UP( SCK )
-        | PULL_UP( MOSI )
-        | PULL_UP( SSA )
-        | ( HIGH << SS3 )
-        | ( HIGH << SS2 )
-        | ( HIGH << SS1 )
-        | ( HIGH << SS0 )
+  PORTB = PULL_UP (SCK)
+        | PULL_UP (MOSI)
+        | PULL_UP (SSA)
+        | (HIGH << SS3)
+        | (HIGH << SS2)
+        | (HIGH << SS1)
+        | (HIGH << SS0)
         ;
 
   // Enable interrupts now that everything is configured
-  sei();
+  sei ();
 
-  send_str("Initialization complete\r\n");
+  send_str ("Initialization complete\r\n");
 }
 
 
@@ -325,26 +340,31 @@ enum
 state = EXPECTING_REQUEST;
 
 
-void static  loop()
+void static  loop ()
 {
   // Go to sleep to save power
-  set_sleep_mode( SLEEP_MODE_IDLE);
-  sleep_mode();
+  set_sleep_mode (SLEEP_MODE_IDLE);
+  sleep_mode ();
 
   uint8_t  data = 0x00;
 
   // If data has arrived via SPI
   // WARNING: -fshort-enums is required so that the enum consumes only a single byte!
-  if ( dequeued_safely( &from_SPI, &data) )
+  if (dequeued_safely (&from_SPI, &data))
   {
-    #ifdef debugging_SPI
-      report("RXSPI:", data );
+    #ifdef DEBUG_SPI
+      //if (data != POLL && data != ASSERT_RESB && data != RELEASE_RESB && data != QUERY_UART_STATUS)
+      if (SELECT_SLAVE_0 <= data && data <= RELEASE_SLAVE)
+      {
+        report ("s:", state);
+        report ("r:", data);
+      }
     #endif
 
-    switch ( state )
+    switch (state)
     {
       case EXPECTING_REQUEST:
-        switch ( (Request)data )
+        switch ((Request) data)
         {
           case POLL:
             break;
@@ -364,7 +384,8 @@ void static  loop()
           case SELECT_SLAVE_4:
           case SELECT_SLAVE_5:
           case SELECT_SLAVE_6:
-            select_slave( data - SELECT_SLAVE_0);
+            float_MISO (); // Stop driving MISO *before* selecting an external slave
+            select_slave (data - SELECT_SLAVE_0);
             break;
 
           case RELEASE_SLAVE:
@@ -375,7 +396,7 @@ void static  loop()
           case QUERY_UART_STATUS:
             // Bit 0: 1:Received data in queue
             // Bit 1: 0:Busy.  Do not send
-            send_byte_via_SPI( UART_is_ready_to_send() << 1  |  ( 0 < queue_length(&from_UART) ? 1 : 0 ) );
+            send_byte_via_SPI (UART_is_ready_to_send() << 1  |  (0 < queue_length(&from_UART) ? 1 : 0));
             break;
 
           case CONFIGURE_UART:
@@ -384,8 +405,8 @@ void static  loop()
           case DEQUEUE_UART_DATA:
             {
               uint8_t  data = 0xff;
-              dequeued_safely( &from_UART, &data ); // If nothing to dequeue then data remains 0xff
-              send_byte_via_SPI( data );
+              dequeued_safely (&from_UART, &data); // If nothing to dequeue then data remains 0xff
+              send_byte_via_SPI (data);
             }
             break;
 
@@ -410,7 +431,7 @@ void static  loop()
         break;
 
       case EXPECTING_DATA_FOR_UART:
-        send_byte_via_UART( data );
+        send_byte_via_UART (data);
         state = EXPECTING_REQUEST;
         break;
     }
@@ -424,13 +445,13 @@ void static  loop()
 }
 
 
-int main( void)
+int main (void)
 {
-  init();
+  setup ();
 
-  while ( true)
+  while (true)
   {
-    loop();
+    loop ();
   }
 }
 

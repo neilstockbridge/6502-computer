@@ -2,6 +2,8 @@
 $fs = 0.5; // This is the shortest that any such polygonal edge can be ( to avoid too many edges in small circles)
 $fa = 360 / 180; // This is the maximum number of edges in a polygon ( to avoid too many edges in large circles)
 
+// TODO: Support under the board so that it doesn't flex on its tripod, esp when pushing down in top left / top right
+
 clearance = 0.15;
 
 wall_thickness = 2;
