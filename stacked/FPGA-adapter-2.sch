@@ -1,0 +1,213 @@
+v 20130925 2
+C 40000 40000 0 0 0 title-B.sym
+C 45200 43800 1 0 0 connector20x2-1.sym
+{
+T 45195 48658 5 10 0 0 0 0 1
+device=40-way connector
+T 45500 43900 5 10 1 1 0 5 1
+refdes=J3
+T 45195 48458 5 10 0 0 0 0 1
+footprint=HEADER40_2
+}
+C 51700 43800 1 0 0 connector20x2-1.sym
+{
+T 51695 48658 5 10 0 0 0 0 1
+device=40-way connector
+T 52000 43900 5 10 1 1 0 5 1
+refdes=J4
+T 51695 48458 5 10 0 0 0 0 1
+footprint=HEADER40_2
+}
+T 50000 40700 9 10 1 0 0 0 1
+FPGA adapter
+T 50000 40100 9 10 1 0 0 0 1
+1
+T 51500 40100 9 10 1 0 0 0 1
+1
+T 54000 40400 9 10 1 0 0 0 1
+1
+T 54000 40100 9 10 1 0 0 0 1
+Neil
+T 44400 47900 8 8 1 1 0 7 1
+netname=R16
+T 44400 47700 8 8 1 1 0 7 1
+netname=T15
+T 44400 47500 8 8 1 1 0 7 1
+netname=T13
+N 51700 46500 51500 46500 4
+{
+T 51400 46500 4 8 1 1 0 7 1
+netname=GND
+}
+T 46600 47300 8 8 1 1 0 1 1
+netname=GND
+T 44400 47100 8 8 1 1 0 7 1
+netname=N12
+T 46600 47100 8 8 1 1 0 1 1
+netname=P13
+T 46600 47500 8 8 1 1 0 1 1
+netname=T14
+T 46600 47700 8 8 1 1 0 1 1
+netname=T16
+T 44400 46900 8 8 1 1 0 7 1
+netname=N10
+T 44400 46700 8 8 1 1 0 7 1
+netname=T11
+T 44400 46500 8 8 1 1 0 7 1
+netname=GND
+T 46600 46500 8 8 1 1 0 1 1
+netname=GND
+T 46600 46700 8 8 1 1 0 1 1
+netname=P10
+T 46600 46900 8 8 1 1 0 1 1
+netname=M11
+T 44400 46300 8 8 1 1 0 7 1
+netname=T10
+T 44400 46100 8 8 1 1 0 7 1
+netname=T8
+T 46600 46100 8 8 1 1 0 1 1
+netname=P9
+T 46600 46300 8 8 1 1 0 1 1
+netname=R10
+T 44400 45900 8 8 1 1 0 7 1
+netname=T9
+T 46600 45900 8 8 1 1 0 1 1
+netname=R9
+T 44400 45700 8 8 1 1 0 7 1
+netname=GND
+T 46600 45700 8 8 1 1 0 1 1
+netname=GND
+T 44400 45500 8 8 1 1 0 7 1
+netname=T7
+T 44400 45300 8 8 1 1 0 7 1
+netname=T6
+T 44400 45100 8 8 1 1 0 7 1
+netname=T5
+T 44400 44900 8 8 1 1 0 7 1
+netname=GND
+T 46600 44900 8 8 1 1 0 1 1
+netname=GND
+T 44400 44100 8 8 1 1 0 7 1
+netname=GND
+T 46600 44100 8 8 1 1 0 1 1
+netname=GND
+T 44400 44700 8 8 1 1 0 7 1
+netname=R3
+T 44400 44500 8 8 1 1 0 7 1
+netname=R2
+T 44400 44300 8 8 1 1 0 7 1
+netname=T1
+T 46600 45500 8 8 1 1 0 1 1
+netname=T8
+T 46600 45300 8 8 1 1 0 1 1
+netname=R6
+T 46600 45100 8 8 1 1 0 1 1
+netname=R5
+T 46600 44700 8 8 1 1 0 1 1
+netname=R4
+T 46600 44500 8 8 1 1 0 1 1
+netname=T3
+T 46600 44300 8 8 1 1 0 1 1
+netname=T2
+T 50900 44100 8 8 1 1 0 7 1
+netname=GND
+T 53100 44100 8 8 1 1 0 1 1
+netname=GND
+T 50900 44900 8 8 1 1 0 7 1
+netname=GND
+T 53100 44900 8 8 1 1 0 1 1
+netname=GND
+T 50900 45700 8 8 1 1 0 7 1
+netname=GND
+T 53100 45700 8 8 1 1 0 1 1
+netname=GND
+T 50900 46500 8 8 1 1 0 7 1
+netname=GND
+T 53100 46500 8 8 1 1 0 1 1
+netname=GND
+T 50900 47300 8 8 1 1 0 7 1
+netname=GND
+T 53100 47300 8 8 1 1 0 1 1
+netname=GND
+T 50900 47900 8 8 1 1 0 7 1
+netname=3.3
+T 53100 47900 8 8 1 1 0 1 1
+netname=IO3
+T 50900 47700 8 8 1 1 0 7 1
+netname=3.3
+T 50900 47500 8 8 1 1 0 7 1
+netname=P1
+T 50900 47100 8 8 1 1 0 7 1
+netname=N3
+T 50900 46900 8 8 1 1 0 7 1
+netname=M2
+T 50900 46700 8 8 1 1 0 7 1
+netname=L3
+T 50900 46300 8 8 1 1 0 7 1
+netname=K3
+T 50900 46100 8 8 1 1 0 7 1
+netname=J2
+T 50900 45900 8 8 1 1 0 7 1
+netname=H2
+T 50900 45500 8 8 1 1 0 7 1
+netname=G2
+T 50900 45300 8 8 1 1 0 7 1
+netname=F2
+T 50900 45100 8 8 1 1 0 7 1
+netname=E2
+T 50900 44700 8 8 1 1 0 7 1
+netname=D1
+T 50900 44500 8 8 1 1 0 7 1
+netname=C1
+T 50900 44300 8 8 1 1 0 7 1
+netname=B1
+T 53100 47700 8 8 1 1 0 1 1
+netname=R1
+T 53100 47500 8 8 1 1 0 1 1
+netname=P2
+T 53100 47100 8 8 1 1 0 1 1
+netname=N2
+T 53100 46900 8 8 1 1 0 1 1
+netname=M1
+T 53100 46700 8 8 1 1 0 1 1
+netname=L1
+T 53100 46300 8 8 1 1 0 1 1
+netname=K1
+T 53100 46100 8 8 1 1 0 1 1
+netname=J1
+T 53100 45900 8 8 1 1 0 1 1
+netname=J3
+T 53100 45500 8 8 1 1 0 1 1
+netname=H1
+T 53100 45300 8 8 1 1 0 1 1
+netname=G1
+T 53100 45100 8 8 1 1 0 1 1
+netname=F1
+T 53100 44700 8 8 1 1 0 1 1
+netname=D2
+T 53100 44500 8 8 1 1 0 1 1
+netname=C2
+T 53100 44300 8 8 1 1 0 1 1
+netname=B2
+N 51700 46900 51500 46900 4
+{
+T 51400 46900 4 8 1 1 0 7 1
+netname=MISO
+}
+N 51700 46700 51500 46700 4
+{
+T 51400 46700 4 8 1 1 0 7 1
+netname=MOSI
+}
+T 46600 47900 8 8 1 1 0 1 1
+netname=IO2
+N 51700 47100 51500 47100 4
+{
+T 51400 47100 4 8 1 1 0 7 1
+netname=SCK
+}
+N 51700 47500 51500 47500 4
+{
+T 51400 47500 4 8 1 1 0 7 1
+netname=SS0
+}

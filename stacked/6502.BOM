@@ -1,0 +1,9 @@
+.START
+..device,value,footprint,quantity,refdes
+40-way connector,unknown,HEADER40_2,1,BUS
+CAPACITOR,100n,CAP_SMALL-100,1,C1
+RESISTOR,33k,RESISTOR-14,1,R1
+RESISTOR,3k3,RESISTOR-14,1,R2
+resistor-array-2,unknown,SOIC-16,1,RSARY1
+W65C02,unknown,DIP40,1,U1
+.END
