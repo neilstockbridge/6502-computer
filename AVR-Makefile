@@ -1,0 +1,87 @@
+
+# Set the following variables and then include this Makefile
+#PROJECT = motor-dial
+#TARGET = attiny13
+#AVRDUDE_PART = t13
+#SYS_CLOCK = 1200000
+#PARTS = main.o
+
+OPTIMIZE ?= -O2
+DEVICE = $(TARGET)
+
+# details common across projects
+
+CC = avr-gcc
+OBJCOPY = avr-objcopy
+
+DEFINES = -DF_CPU=$(SYS_CLOCK)
+CFLAGS = -std=c99 -mmcu=$(TARGET) $(OPTIMIZE) -fshort-enums $(DEFINES) -Wall $(DEBUG)
+PROGRAMMER = usbtiny
+AVRDUDE_OPTS = -c $(PROGRAMMER) -p $(AVRDUDE_PART) -q
+COMPILE=$(CC) $(CFLAGS) $(INCLUDES)
+
+# don't echo commands issued by make
+.SILENT:
+
+# Generic rule for compiling C files:
+.c.o:
+	$(COMPILE) -c $< -o $@
+
+# Generic rule for assembling Assembler source files:
+.S.o:
+	$(COMPILE) -x assembler-with-cpp -c $< -o $@
+# "-x assembler-with-cpp" should not be necessary since this is the default
+# file type for the .S (with capital S) extension. However, upper case
+# characters are not always preserved on Windows. To ensure WinAVR
+# compatibility define the file type manually.
+
+
+# Targets...
+
+all: $(PROJECT).elf
+
+$(PROJECT).elf: $(PARTS)
+	$(CC) $(CFLAGS) -o $(PROJECT).elf -Wl,-Map,$(PROJECT).map $(PARTS)
+	/usr/bin/size $(PROJECT).elf | tail -1 | awk '{print "flash: "$$1+$$2" bytes"; print "RAM:   "$$2+$$3" bytes"}'
+
+$(PROJECT).hex: $(PROJECT).elf
+	$(OBJCOPY) -O ihex $(PROJECT).elf $(PROJECT).hex
+
+$(PROJECT).bin: $(PROJECT).elf
+	$(OBJCOPY) -O binary $(PROJECT).elf $(PROJECT).bin
+
+simulate: $(PROJECT).bin
+	simulavr -d $(TARGET) -P simulavr-disp $(PROJECT).bin
+
+identify: $(PROJECT).hex
+	avrdude $(AVRDUDE_OPTS) identify
+
+console:
+	avrdude $(AVRDUDE_OPTS) -t
+
+fuses:
+#LFUSE=0xf7# ATmega164PA full-swing crystal, slowly rising power, CKDIV8=no, CKOUT=disabled
+	avrdude $(AVRDUDE_OPTS) -U lfuse:w:$(LFUSE):m
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0x6a:m  # ATtiny13 SPIEN:y EESAVE:n WDTON:n CKDIV8:y, RC osc., slowly rising power
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0xfd:m  # ATtinyX61 crystal 3-8MHz, slowly rising power, CKDIV8=no, CKOUT=disabled
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0x62:m  # ATtinyX61 internal RC osc, slowly rising power, CKDIV8=yes, CKOUT=disabled
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0xe2:m  # ATtinyX61 internal RC osc, slowly rising power, CKDIV8=no, CKOUT=disabled
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0xff:m  # ATtiny2313 crystal 8+MHz, slowly rising power, CKDIV8=no, CKOUT=disabled
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0xf7:m  # ATmega48 crystal 0.4-20MHz, slowly rising power, CKDIV8=no, CKOUT=disabled
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0xe0:m  # ATtiny85 ext clk, slowly rising power, CKDIV8=no, CKOUT=disabled
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0x60:m  # ATtiny85 ext clk, slowly rising power, CKDIV8=yes, CKOUT=disabled
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0xe2:m  # ATtiny85 7:CKDIV8, 6:CKOUT, 4-5:SUT, 0-3:CKSEL  CKSEL 2 is 8 MHz RC. SUT 2 is slowly rising
+#	avrdude $(AVRDUDE_OPTS) -U lfuse:w:0x62:m  # ATtiny85 7:CKDIV8, 6:CKOUT, 4-5:SUT, 0-3:CKSEL  CKSEL 2 is internal RC. SUT 2 is slowly rising
+
+dis: $(PROJECT).elf
+	avr-objdump --source $(PROJECT).elf
+
+upload: $(PROJECT).hex
+	avrdude $(AVRDUDE_OPTS) -U flash:w:$(PROJECT).hex
+
+verify: $(PROJECT).hex
+	avrdude $(AVRDUDE_OPTS) -U flash:v:$(PROJECT).hex
+
+clean:
+	rm -f *.o *.elf *.map *.hex *.bin $(PROJECT)
+

@@ -1,0 +1,89 @@
+
+FOOTPRINTS=~/files/gEDA-footprints
+TEMP_FILE = /tmp/bill-of-materials.tsv
+OUT_DIR= /tmp/cnc
+
+# don't echo commands issued by make
+.SILENT:
+
+
+pcb:
+	gsch2pcb --elements-dir $(FOOTPRINTS) $(BOARD).sch
+	gnetlist -q -g partslist3 -o $(TEMP_FILE) $(BOARD).sch
+	tr \\11 , < $(TEMP_FILE) > $(BOARD).csv
+	rm $(TEMP_FILE)
+	/home/neil/bin/rename-transistor-pins.pl $(BOARD).net
+
+# Export to gerber from within pcb first, then:
+gerbers:
+	[ -f /tmp/$(BOARD).top.gbr ] || echo ERROR: Export gerber from "pcb" first
+	# OSH Park don't seem to look for .cnc files any more
+	if [ -f /tmp/$(BOARD).*.cnc ]; then  rename 's/cnc/xln/' /tmp/$(BOARD).*.cnc ; fi
+	zip --junk-paths  /tmp/$(BOARD).zip  /tmp/$(BOARD).*.gbr  /tmp/$(BOARD).*.xln
+
+# A .zip file for DirtyPCBs
+dirty-zip:
+	[ -f /tmp/$(BOARD).top.gbr ] || echo ERROR: Export gerber from "pcb" first
+	mv /tmp/$(BOARD).top.gbr              /tmp/$(BOARD).GTL
+	mv /tmp/$(BOARD).topmask.gbr          /tmp/$(BOARD).GTS
+	mv /tmp/$(BOARD).topsilk.gbr          /tmp/$(BOARD).GTO
+	mv /tmp/$(BOARD).bottom.gbr           /tmp/$(BOARD).GBL
+	mv /tmp/$(BOARD).bottommask.gbr       /tmp/$(BOARD).GBS
+	mv /tmp/$(BOARD).outline.gbr          /tmp/$(BOARD).GBR
+	mv /tmp/$(BOARD).unplated-drill.cnc   /tmp/$(BOARD)_UNPLATED-DRILL.TXT
+	mv /tmp/$(BOARD).plated-drill.cnc     /tmp/$(BOARD)_PLATED-DRILL.TXT
+	mv /tmp/$(BOARD).fab.gbr              /tmp/$(BOARD)_FAB.GBR
+	zip --junk-paths  /tmp/$(BOARD).zip  /tmp/$(BOARD).G*  /tmp/$(BOARD)_FAB.GBR  /tmp/$(BOARD)_*.TXT
+
+# A .zip file for SeeedStudio
+seeed-zip:
+	[ -f /tmp/$(BOARD).top.gbr ] || echo ERROR: Export gerber from "pcb" first
+	mv /tmp/$(BOARD).top.gbr              /tmp/$(BOARD).GTL
+	mv /tmp/$(BOARD).topmask.gbr          /tmp/$(BOARD).GTS
+	mv /tmp/$(BOARD).topsilk.gbr          /tmp/$(BOARD).GTO
+	mv /tmp/$(BOARD).bottom.gbr           /tmp/$(BOARD).GBL
+	mv /tmp/$(BOARD).bottommask.gbr       /tmp/$(BOARD).GBS
+	mv /tmp/$(BOARD).outline.gbr          /tmp/$(BOARD).GKO
+	mv /tmp/$(BOARD).plated-drill.cnc     /tmp/$(BOARD).TXT
+	rm /tmp/$(BOARD).fab.gbr
+	rm /tmp/$(BOARD).bottompaste.gbr
+	rm /tmp/$(BOARD).bottomsilk.gbr
+	zip --junk-paths  /tmp/$(BOARD).zip  /tmp/$(BOARD).G*  /tmp/$(BOARD).TXT
+
+gcode:
+	[ -d "$(OUT_DIR)" ] || mkdir $(OUT_DIR)
+	pcb2gcode \
+  --zsafe 0.16 \
+  --zwork -0.004 \
+  --zchange 1 \
+  --offset 0.02 \
+  --mill-feed 1.0 \
+  --mill-speed 3000 \
+  --back /tmp/$(BOARD).bottom.gbr \
+  --back-output $(OUT_DIR)/$(BOARD).bottom.ngc \
+  --zdrill -0.06 \
+  --drill-feed 0.6 \
+  --drill-speed 3000 \
+  --drill /tmp/$(BOARD).plated-drill.cnc \
+  --drill-output $(OUT_DIR)/$(BOARD).drill.ngc \
+  --fill-outline \
+  --outline-width 0.01 \
+  --outline /tmp/$(BOARD).outline.gbr \
+  --cutter-diameter 0.1 \
+  --cut-speed 3000 \
+  --zcut -0.09 \
+  --cut-infeed 0.1 \
+  --cut-feed 1.0
+	fix-up-drilling $(OUT_DIR)/$(BOARD).drill.ngc
+	mv outline.ngc $(OUT_DIR)/$(BOARD).outline.ngc
+	rm \
+  outp0_original_back.png \
+  outp1_original_outline.png \
+  outp2_outline_filled.png \
+  outp3_masked.png \
+  outp4_traced.png \
+  outp5_traced.png
+
+clean:
+	rm -f  *~  *.log  *.net  *.cmd  *.new.pcb  *-  $(BOARD).csv  /tmp/$(BOARD).zip  /tmp/$(BOARD).*.gbr  /tmp/$(BOARD).*.xln  /tmp/$(BOARD).G*  /tmp/$(BOARD)_FAB.GBR  /tmp/$(BOARD)_*.TXT  /tmp/$(BOARD).TXT
+
