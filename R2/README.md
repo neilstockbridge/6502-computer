@@ -7,10 +7,12 @@ Currently it lives as modules based around a 2x20 headers that stack Arduino-sty
 
 There are modules for:
 
-  - The 6502
-  - A 128K SRAM, although 512K is available in the same footprint so that would have been a better choice
-  - A "Monitor" AVR that can be instructed via RS-232 to suspend the 6502, read and write to the SRAM and reset the 6502
-  - An adapter from the Lattice HX8K development board headers to the bus
+  - The 6502 (White solder mask in the photo.  The resistor is a pull-up on NMI that I forgot)
+  - A 128K SRAM, although 512K is available in the same footprint so that would have been a better choice (Green mask in the photo)
+  - A "Monitor" AVR that can be instructed via RS-232 to suspend the 6502, read and write to the SRAM and reset the 6502 (Purple mask)
+  - An adapter from the Lattice HX8K development board headers to the bus (Yellow)
+
+The photo also shows a flash chip on a breadboard, accessed via SPI.
 
 The FPGA provides:
 
@@ -24,22 +26,22 @@ The FPGA provides:
 
 ## Reset control
 
-`RESB` on the FPGA is open collector.  Following a strobe low on `RESB` the FPGA will pull `RESB` low for at least two cycles of `PHI2` even if `PHI2` is stopped.
+`RESB` on the FPGA is open collector.  Following a strobe low on `RESB` the FPGA will pull `RESB` low for at least two cycles of `PHI2` even if `PHI2` is stopped at the time (counts `PHI2` cycles rather than being time-based).
 
 
 ## Clock scaler
 
-The clock scaler is accessible to the 6502 as a memory-mapped bus device.  Currently the maximum speed is 6 MHz, at which the system is stable so it's more for later revisions when the FPGA will be clocked faster.
+The clock scaler is accessible to the 6502 as a memory-mapped bus device.  Currently the maximum speed is 6 MHz, at which the system is stable so it's more for later revisions when the FPGA might be clocked faster.
 
 
 ## Cycle counter
 
-The cycle counter is a bus device available to the 6502 that makes it easier to count the cycles used by some code.  A write to register `0` resets the counter and begins counting cycles of `PHI2`.  A read stops the counting so that the value may be read.
+The cycle counter is a bus device available to the 6502 that makes it easier to count the cycles used by some code.  A write to register `0` resets the counter and begins counting cycles of `PHI2`.  A read stops the counting so that the (16-bit) value may be read.
 
 
 ## UART
 
-The UART only seems stable at 9600 baud.  Received frames seem to be corrupted at higher rates although it was initially stable at 115200 baud.  An external serial-friendly oscillator might help.
+The UART only seems stable at 9600 baud.  Received frames seem to be corrupted at higher rates although it was initially stable at 115200 baud.  An external baud-rate-friendly oscillator might help.
 
 
 ## SPI
